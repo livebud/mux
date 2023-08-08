@@ -2,13 +2,15 @@ package radix
 
 import (
 	"fmt"
+	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/livebud/router/internal/ast"
 	"github.com/livebud/router/internal/parser"
 )
 
-var ErrDuplicate = fmt.Errorf("route already exists")
+var ErrDuplicate = fmt.Errorf("route")
 var ErrNoMatch = fmt.Errorf("no match")
 
 func New() *Tree {
@@ -48,10 +50,32 @@ func (t *Tree) insert(route *ast.Route) error {
 type Node struct {
 	Route    *ast.Route
 	sections ast.Sections
-	children []*Node
+	children Nodes
 }
 
-// type Nodes []*Node
+func (n *Node) Priority() (priority int) {
+	if len(n.sections) == 0 {
+		return 0
+	}
+	return n.sections[0].Priority()
+}
+
+type Nodes []*Node
+
+var _ sort.Interface = (*Nodes)(nil)
+
+func (n Nodes) Len() int {
+	return len(n)
+}
+
+func (n Nodes) Less(i, j int) bool {
+	// fmt.Println("i", n[i].sections, n[i].Priority(), "j", n[j].sections, n[j].Priority(), n[i].Priority() < n[j].Priority())
+	return n[i].Priority() > n[j].Priority()
+}
+
+func (n Nodes) Swap(i, j int) {
+	n[i], n[j] = n[j], n[i]
+}
 
 func (n *Node) insert(route *ast.Route, sections ast.Sections) error {
 	lcp := longestCommonPrefix(n.sections, sections)
@@ -65,7 +89,7 @@ func (n *Node) insert(route *ast.Route, sections ast.Sections) error {
 			children: n.children,
 		}
 		n.sections = parts[0]
-		n.children = []*Node{splitChild}
+		n.children = Nodes{splitChild}
 		n.Route = route
 		// Finally we can add the child
 		if lcp < sections.Len() {
@@ -77,11 +101,17 @@ func (n *Node) insert(route *ast.Route, sections ast.Sections) error {
 			n.children = append(n.children, newChild)
 			n.Route = nil
 		}
+		sort.Sort(n.children)
 		return nil
 	}
 	// Route already exists
 	if lcp == sections.Len() {
-		return fmt.Errorf("%w: %q", ErrDuplicate, n.sections.String())
+		oldRoute := n.Route.String()
+		newRoute := route.String()
+		if oldRoute == newRoute {
+			return fmt.Errorf("%w already exists %q", ErrDuplicate, oldRoute)
+		}
+		return fmt.Errorf("%w %q is ambigous with %q", ErrDuplicate, newRoute, oldRoute)
 	}
 	// Check children for a match
 	remainingSections := sections.Split(lcp)[1]
@@ -94,6 +124,7 @@ func (n *Node) insert(route *ast.Route, sections ast.Sections) error {
 		Route:    route,
 		sections: remainingSections,
 	})
+	sort.Sort(n.children)
 	return nil
 }
 
@@ -102,19 +133,37 @@ type Slot struct {
 	Value string
 }
 
+func createSlots(route *ast.Route, slotValues []string) (slots []*Slot) {
+	index := 0
+	for _, section := range route.Sections {
+		switch s := section.(type) {
+		case ast.Slot:
+			slots = append(slots, &Slot{
+				Key:   s.Slot(),
+				Value: slotValues[index],
+			})
+			index++
+		}
+	}
+	return slots
+}
+
 type Match struct {
 	Route *ast.Route
+	Path  string
 	Slots []*Slot
 }
 
 func (m *Match) String() string {
 	s := new(strings.Builder)
 	s.WriteString(m.Route.String())
+	query := url.Values{}
 	for _, slot := range m.Slots {
+		query.Add(slot.Key, slot.Value)
+	}
+	if len(query) > 0 {
 		s.WriteString(" ")
-		s.WriteString(slot.Key)
-		s.WriteString("=")
-		s.WriteString(slot.Value)
+		s.WriteString(query.Encode())
 	}
 	return s.String()
 }
@@ -125,28 +174,35 @@ func (t *Tree) Match(path string) (*Match, error) {
 	if t.root == nil || len(path) == 0 || path[0] != '/' {
 		return nil, fmt.Errorf("%w for %q", ErrNoMatch, path)
 	}
-	match, ok := t.root.Match(path)
+	match, ok := t.root.Match(path, []string{})
 	if !ok {
 		return nil, fmt.Errorf("%w for %q", ErrNoMatch, path)
 	}
 	return match, nil
 }
 
-func (n *Node) Match(path string) (*Match, bool) {
+func (n *Node) Match(path string, slotValues []string) (*Match, bool) {
 	for _, section := range n.sections {
-		index := section.Match(path)
-		if index < 0 {
+		index, slots := section.Match(path)
+		if index <= 0 {
 			return nil, false
 		}
 		path = path[index:]
+		slotValues = append(slotValues, slots...)
 	}
 	if len(path) == 0 {
+		// We've reached a non-routable node
+		if n.Route == nil {
+			return nil, false
+		}
 		return &Match{
 			Route: n.Route,
+			Path:  path,
+			Slots: createSlots(n.Route, slotValues),
 		}, true
 	}
 	for _, child := range n.children {
-		if match, ok := child.Match(path); ok {
+		if match, ok := child.Match(path, slotValues); ok {
 			return match, true
 		}
 	}

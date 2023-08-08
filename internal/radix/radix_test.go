@@ -2,6 +2,7 @@ package radix_test
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -124,22 +125,22 @@ func TestSampleInsert(t *testing.T) {
 	`)
 }
 
-func TestEquals(t *testing.T) {
+func TestEqual(t *testing.T) {
 	tree := radix.New()
 	insertEqual(t, tree, "/hello/{name}", `
 		/hello/{name} [routable=/hello/{name}]
 	`)
-	insertEqual(t, tree, "/hello/{name}", `route already exists: "/hello/{name}"`)
+	insertEqual(t, tree, "/hello/{name}", `route already exists "/hello/{name}"`)
 	insertEqual(t, tree, "/hello", `
 		/hello [routable=/hello]
 		••••••/{name} [routable=/hello/{name}]
 	`)
-	insertEqual(t, tree, "/hello", `route already exists: "/hello"`)
+	insertEqual(t, tree, "/hello", `route already exists "/hello"`)
 	tree = radix.New()
 	insertEqual(t, tree, "/{name}", `
 		/{name} [routable=/{name}]
 	`)
-	insertEqual(t, tree, "/{title}", `route already exists: "/{name}"`)
+	insertEqual(t, tree, "/{title}", `route "/{title}" is ambigous with "/{name}"`)
 }
 
 func TestDifferentSlots(t *testing.T) {
@@ -154,8 +155,8 @@ func TestDifferentSlots(t *testing.T) {
 	insertEqual(t, tree, "/{first}/else", `
 		/{name} [routable=/{name}]
 		•••••••/
-		••••••••{last} [routable=/{first}/{last}]
 		••••••••else [routable=/{first}/else]
+		••••••••{last} [routable=/{first}/{last}]
 	`)
 	tree = radix.New()
 	insertEqual(t, tree, "/{name}", `
@@ -163,8 +164,8 @@ func TestDifferentSlots(t *testing.T) {
 	`)
 	insertEqual(t, tree, "/else", `
 		/
-		•{name} [routable=/{name}]
 		•else [routable=/else]
+		•{name} [routable=/{name}]
 	`)
 }
 
@@ -179,14 +180,14 @@ func TestPathAfter(t *testing.T) {
 	`)
 	insertEqual(t, tree, "/first/{name}", `
 		/ [routable=/]
-		•{name} [routable=/{name}]
 		•first/{name} [routable=/first/{name}]
+		•{name} [routable=/{name}]
 	`)
 	insertEqual(t, tree, "/first", `
 		/ [routable=/]
-		•{name} [routable=/{name}]
 		•first [routable=/first]
 		••••••/{name} [routable=/first/{name}]
+		•{name} [routable=/{name}]
 	`)
 }
 
@@ -198,25 +199,25 @@ func TestOptionals(t *testing.T) {
 	`)
 	insertEqual(t, tree, "/first/{last?}", `
 		/ [routable=/]
-		•{name} [routable=/{name}]
 		•first [routable=/first]
 		••••••/{last} [routable=/first/{last}]
+		•{name} [routable=/{name}]
 	`)
 	insertEqual(t, tree, "/{first}/{last}", `
 		/ [routable=/]
-		•{name} [routable=/{name}]
-		•••••••/{last} [routable=/{first}/{last}]
 		•first [routable=/first]
 		••••••/{last} [routable=/first/{last}]
+		•{name} [routable=/{name}]
+		•••••••/{last} [routable=/{first}/{last}]
 	`)
 	insertEqual(t, tree, "/first/else", `
 		/ [routable=/]
-		•{name} [routable=/{name}]
-		•••••••/{last} [routable=/{first}/{last}]
 		•first [routable=/first]
 		••••••/
-		•••••••{last} [routable=/first/{last}]
 		•••••••else [routable=/first/else]
+		•••••••{last} [routable=/first/{last}]
+		•{name} [routable=/{name}]
+		•••••••/{last} [routable=/{first}/{last}]
 	`)
 }
 
@@ -228,25 +229,25 @@ func TestWildcards(t *testing.T) {
 	`)
 	insertEqual(t, tree, "/first/{last*}", `
 		/ [routable=/]
-		•{name*} [routable=/{name*}]
 		•first [routable=/first]
 		••••••/{last*} [routable=/first/{last*}]
+		•{name*} [routable=/{name*}]
 	`)
 	insertEqual(t, tree, "/{first}/{last}", `
 		/ [routable=/]
-		•{name*} [routable=/{name*}]
-		••••••••/{last} [routable=/{first}/{last}]
 		•first [routable=/first]
 		••••••/{last*} [routable=/first/{last*}]
+		•{name*} [routable=/{name*}]
+		••••••••/{last} [routable=/{first}/{last}]
 	`)
 	insertEqual(t, tree, "/first/else", `
 		/ [routable=/]
-		•{name*} [routable=/{name*}]
-		••••••••/{last} [routable=/{first}/{last}]
 		•first [routable=/first]
 		••••••/
-		•••••••{last*} [routable=/first/{last*}]
 		•••••••else [routable=/first/else]
+		•••••••{last*} [routable=/first/{last*}]
+		•{name*} [routable=/{name*}]
+		••••••••/{last} [routable=/{first}/{last}]
 	`)
 }
 
@@ -263,46 +264,322 @@ func TestRootSwap(t *testing.T) {
 	`)
 }
 
-func matchEqual(t *testing.T, tree *radix.Tree, path string, expect string) {
+func TestPriority(t *testing.T) {
+	tree := radix.New()
+	insertEqual(t, tree, "/v{version}", `
+		/v{version} [routable=/v{version}]
+	`)
+	insertEqual(t, tree, "/v2", `
+		/v
+		••2 [routable=/v2]
+		••{version} [routable=/v{version}]
+	`)
+}
+
+func TestSlotSplit(t *testing.T) {
+	tree := radix.New()
+	insertEqual(t, tree, "/users/{id}/edit", `
+		/users/{id}/edit [routable=/users/{id}/edit]
+	`)
+	insertEqual(t, tree, "/users/settings", `
+		/users/
+		•••••••settings [routable=/users/settings]
+		•••••••{id}/edit [routable=/users/{id}/edit]
+	`)
+}
+
+type Routes []Route
+
+type Route struct {
+	Route    string
+	Requests Requests
+}
+
+type Requests []Request
+
+type Request struct {
+	Path   string
+	Expect string
+}
+
+func matchPath(t *testing.T, tree *radix.Tree, path string, expect string) {
 	t.Helper()
-	t.Run(path, func(t *testing.T) {
-		t.Helper()
-		match, err := tree.Match(path)
-		if err != nil {
-			if err.Error() == expect {
-				return
-			}
-			t.Fatal(err.Error())
-		}
-		actual := match.String()
-		if actual == expect {
+	match, err := tree.Match(path)
+	if err != nil {
+		if err.Error() == expect {
 			return
 		}
-		var b bytes.Buffer
-		b.WriteString("\n\x1b[4mExpected\x1b[0m:\n")
-		b.WriteString(expect)
-		b.WriteString("\n\n")
-		b.WriteString("\x1b[4mActual\x1b[0m: \n")
-		b.WriteString(actual)
-		b.WriteString("\n\n")
-		b.WriteString("\x1b[4mDifference\x1b[0m: \n")
-		b.WriteString(diff.String(expect, actual))
-		b.WriteString("\n")
-		t.Fatal(b.String())
+		t.Fatal(err.Error())
+	}
+	actual := match.String()
+	if actual == expect {
+		return
+	}
+	var b bytes.Buffer
+	b.WriteString("\n\x1b[4mExpected\x1b[0m:\n")
+	b.WriteString(expect)
+	b.WriteString("\n\n")
+	b.WriteString("\x1b[4mActual\x1b[0m: \n")
+	b.WriteString(actual)
+	b.WriteString("\n\n")
+	b.WriteString("\x1b[4mDifference\x1b[0m: \n")
+	b.WriteString(diff.String(expect, actual))
+	b.WriteString("\n")
+	t.Fatal(b.String())
+}
+
+func matchEqual(t *testing.T, routes Routes) {
+	t.Helper()
+	t.Helper()
+	tree := radix.New()
+	for _, route := range routes {
+		if err := tree.Insert(route.Route); err != nil {
+			t.Fatal(err)
+		}
+		for _, request := range route.Requests {
+			t.Run(route.Route, func(t *testing.T) {
+				t.Helper()
+				matchPath(t, tree, request.Path, request.Expect)
+			})
+		}
+	}
+}
+
+func TestSampleMatch(t *testing.T) {
+	matchEqual(t, Routes{})
+	matchEqual(t, Routes{
+		{"/hello", Requests{
+			{"/hello", `/hello`},
+			{"/hello/world", `no match for "/hello/world"`},
+			{"/", `no match for "/"`},
+			{"/hello/", `/hello`},
+		}},
+	})
+	matchEqual(t, Routes{
+		{"/hello", Requests{
+			{"/hello", `/hello`},
+			{"/hello/world", `no match for "/hello/world"`},
+			{"/hello/", `/hello`},
+		}},
+		{"/", Requests{
+			{"/hello", `/hello`},
+			{"/hello/world", `no match for "/hello/world"`},
+			{"/", `/`},
+			{"/hello/", `/hello`},
+		}},
+	})
+	matchEqual(t, Routes{
+		{"/v{version}", Requests{
+			{"/v2", "/v{version} version=2"},
+		}},
+		{"/v{major}.{minor}.{patch}", Requests{
+			{"/v2", "/v{version} version=2"},
+			{"/v2.0.1", "/v{major}.{minor}.{patch} major=2&minor=0&patch=1"},
+		}},
+		{"/v1", Requests{
+			{"/v2", "/v{version} version=2"},
+			{"/v2.0.1", "/v{major}.{minor}.{patch} major=2&minor=0&patch=1"},
+			{"/v1", "/v1"},
+		}},
+		{"/v2.0.0", Requests{
+			{"/v2", "/v{version} version=2"},
+			{"/v2.0.1", "/v{major}.{minor}.{patch} major=2&minor=0&patch=1"},
+			{"/v1", "/v1"},
+			{"/v2.0.0", "/v2.0.0"},
+		}},
+	})
+	matchEqual(t, Routes{
+		{"/users/{id}/edit", Requests{}},
+		{"/users/settings", Requests{}},
+		{"/v.{major}.{minor}", Requests{}},
+		{"/v.1", Requests{
+			{"/v.1.0", `/v.{major}.{minor} major=1&minor=0`},
+			{"/users/settings/edit", `/users/{id}/edit id=settings`},
+			{"/users/settings", `/users/settings`},
+			{"/v.1", `/v.1`},
+		}},
 	})
 }
 
-func TestMatch(t *testing.T) {
+func TestNonRoutableNoMatch(t *testing.T) {
 	is := is.New(t)
 	tree := radix.New()
 	is.NoErr(tree.Insert("/hello"))
-	matchEqual(t, tree, "/hello", `/hello`)
-	matchEqual(t, tree, "/hello/world", `no match for "/hello/world"`)
-	matchEqual(t, tree, "/", `no match for "/"`)
-	matchEqual(t, tree, "/hello/", `/hello`)
-	is.NoErr(tree.Insert("/"))
-	matchEqual(t, tree, "/hello", `/hello`)
-	matchEqual(t, tree, "/hello/world", `no match for "/hello/world"`)
-	matchEqual(t, tree, "/", `/`)
-	matchEqual(t, tree, "/hello/", `/hello`)
+	is.NoErr(tree.Insert("/world"))
+	match, err := tree.Match("/")
+	is.True(errors.Is(err, radix.ErrNoMatch))
+	is.Equal(match, nil)
 }
+
+func TestNoRoutes(t *testing.T) {
+	is := is.New(t)
+	tree := radix.New()
+	match, err := tree.Match("/")
+	is.True(errors.Is(err, radix.ErrNoMatch))
+	is.Equal(match, nil)
+	match, err = tree.Match("/a")
+	is.True(errors.Is(err, radix.ErrNoMatch))
+	is.Equal(match, nil)
+}
+
+func TestAllMatch(t *testing.T) {
+	matchEqual(t, Routes{
+		{"/hi", Requests{}},
+		{"/ab", Requests{}},
+		{"/about", Requests{}},
+		{"/a", Requests{}},
+		{"/α", Requests{}},
+		{"/β", Requests{}},
+		{"/users", Requests{}},
+		{"/users/new", Requests{}},
+		{"/users/id", Requests{}},
+		{"/users/{id}", Requests{}},
+		{"/users/{id}/edit", Requests{}},
+		{"/posts/{post_id}/comments", Requests{}},
+		{"/posts/{post_id}/comments/new", Requests{}},
+		{"/posts/{post_id}/comments/{id}", Requests{}},
+		{"/posts/{post_id}/comments/{id}/edit", Requests{}},
+		{"/v.{version}", Requests{}},
+		{"/v.{major}.{minor}.{patch}", Requests{}},
+		{"/v.1", Requests{}},
+		{"/v.2.0.0", Requests{}},
+		{"/posts/{post_id}.{format}", Requests{}},
+		{"/flights/{from}/{to}", Requests{}},
+		{"/user/{user}/project/{project}", Requests{}},
+		{"/archive/{year}/{month}", Requests{}},
+		{"/search/{query}", Requests{
+			{"/a", "/a"},
+			{"/A", "/a"},
+			{"/", `no match for "/"`},
+			{"/hi", "/hi"},
+			{"/about", "/about"},
+			{"/ab", "/ab"},
+			{"/abo", `no match for "/abo"`},   // key mismatch
+			{"/abou", `no match for "/abou"`}, // key mismatch
+			{"/no", `no match for "/no"`},     // no matching child
+			{"/α", "/α"},
+			{"/β", "/β"},
+			{"/αβ", `no match for "/αβ"`},
+			{"/users/id", "/users/id"},
+			{"/users/10", "/users/{id} id=10"},
+			{"/users/1", "/users/{id} id=1"},
+			{"/users/a", "/users/{id} id=a"},
+			{"/users/-", "/users/{id} id=-"},
+			{"/users/_", "/users/{id} id=_"},
+			{"/users/abc-d_e", "/users/{id} id=abc-d_e"},
+			{"/users/10/edit", "/users/{id}/edit id=10"},
+			{"/users/1/edit", "/users/{id}/edit id=1"},
+			{"/users/a/edit", "/users/{id}/edit id=a"},
+			{"/users/-/edit", "/users/{id}/edit id=-"},
+			{"/users/_/edit", "/users/{id}/edit id=_"},
+			{"/users/abc-d_e/edit", "/users/{id}/edit id=abc-d_e"},
+			{"/posts/1/comments", "/posts/{post_id}/comments post_id=1"},
+			{"/posts/10/comments", "/posts/{post_id}/comments post_id=10"},
+			{"/posts/a/comments", "/posts/{post_id}/comments post_id=a"},
+			{"/posts/-/comments", "/posts/{post_id}/comments post_id=-"},
+			{"/posts/_/comments", "/posts/{post_id}/comments post_id=_"},
+			{"/posts/abc-d_e/comments", "/posts/{post_id}/comments post_id=abc-d_e"},
+			{"/posts/1/comments/2", "/posts/{post_id}/comments/{id} id=2&post_id=1"},
+			{"/posts/10/comments/20", "/posts/{post_id}/comments/{id} id=20&post_id=10"},
+			{"/posts/a/comments/b", "/posts/{post_id}/comments/{id} id=b&post_id=a"},
+			{"/posts/-/comments/-", "/posts/{post_id}/comments/{id} id=-&post_id=-"},
+			{"/posts/_/comments/_", "/posts/{post_id}/comments/{id} id=_&post_id=_"},
+			{"/posts/abc-d_e/comments/x-y_z", "/posts/{post_id}/comments/{id} id=x-y_z&post_id=abc-d_e"},
+			{"/posts/1/comments/2/edit", "/posts/{post_id}/comments/{id}/edit id=2&post_id=1"},
+			{"/posts/10/comments/20/edit", "/posts/{post_id}/comments/{id}/edit id=20&post_id=10"},
+			{"/posts/a/comments/b/edit", "/posts/{post_id}/comments/{id}/edit id=b&post_id=a"},
+			{"/posts/-/comments/-/edit", "/posts/{post_id}/comments/{id}/edit id=-&post_id=-"},
+			{"/posts/_/comments/_/edit", "/posts/{post_id}/comments/{id}/edit id=_&post_id=_"},
+			{"/posts/abc-d_e/comments/x-y_z/edit", "/posts/{post_id}/comments/{id}/edit id=x-y_z&post_id=abc-d_e"},
+			{"/v.1", "/v.1"},
+			{"/v.2", "/v.{version} version=2"},
+			{"/v.abc", "/v.{version} version=abc"},
+			{"/v.2.0.0", "/v.2.0.0"},
+			{"/posts/10.json", "/posts/{post_id}.{format} format=json&post_id=10"},
+			{"/flights/Berlin/Madison", "/flights/{from}/{to} from=Berlin&to=Madison"},
+			{"/archive/2021/2", "/archive/{year}/{month} month=2&year=2021"},
+			{"/search/someth!ng+in+ünìcodé", "/search/{query} query=someth%21ng%2Bin%2B%C3%BCn%C3%ACcod%C3%A9"},
+			{"/search/with spaces", "/search/{query} query=with+spaces"},
+			{"/search/with/slashes", `no match for "/search/with/slashes"`},
+		}},
+	})
+}
+
+func TestMatchUnicode(t *testing.T) {
+	matchEqual(t, Routes{
+		{"/α", Requests{}},
+		{"/β", Requests{}},
+		{"/δ", Requests{
+			{"/α", `/α`},
+			{"/β", `/β`},
+			{"/δ", `/δ`},
+			{"/Δ", `/δ`},
+			{"/αβ", `no match for "/αβ"`},
+		}},
+	})
+}
+
+// func TestOptional(t *testing.T) {
+// 	okp(t, &test{
+// 		inserts: []*insert{
+// 			{route: "/:id?"},
+// 			{route: "/users/:id.:format?"},
+// 			{route: "/users/v:version?"},
+// 			{route: "/flights/:from/:to?"},
+// 		},
+// 		requests: []*request{
+// 			{path: "/", route: "/:id?"},
+// 			{path: "/10", route: "/:id?", slots: `id=10`},
+// 			{path: "/a", route: "/:id?", slots: `id=a`},
+
+// 			{path: "/users/10", route: "/users/:id.:format?", slots: `id=10`},
+// 			{path: "/users/10/", nomatch: true},
+// 			{path: "/users/10.json", route: "/users/:id.:format?", slots: `format=json&id=10`},
+// 			{path: "/users/10.rss", route: "/users/:id.:format?", slots: `format=rss&id=10`},
+// 			{path: "/users/index.html", route: "/users/:id.:format?", slots: `format=html&id=index`},
+// 			{path: "/users/ü.html", route: "/users/:id.:format?", slots: `format=html&id=ü`},
+// 			{path: "/users/index.html/more", nomatch: true},
+
+// 			{path: "/users", route: "/users/v:version?"},
+// 			{path: "/users/", nomatch: true},
+// 			{path: "/users/v10", route: "/users/v:version?", slots: `version=10`},
+// 			{path: "/users/v1", route: "/users/v:version?", slots: `version=1`},
+
+// 			{path: "/flights/Berlin", route: "/flights/:from/:to?", slots: `from=Berlin`},
+// 			{path: "/flights/Berlin/", nomatch: true},
+// 			{path: "/flights/Berlin/Madison", route: "/flights/:from/:to?", slots: `from=Berlin&to=Madison`},
+// 		},
+// 	})
+// 	ok(t, &test{
+// 		inserts: []*insert{
+// 			{route: "/:id?"},
+// 			{route: "/:a.:b?", err: `radix: ambiguous routes "/:a.:b?" and "/:id?"`},
+// 			{route: "/x:id?"},
+// 			{route: "/not/:last?/path", err: `route "/not/:last?/path": optional "?" must be at the end`},
+// 			{route: "/slash/:last?/", err: `route "/slash/:last?/": optional "?" must be at the end`},
+// 		},
+// 	})
+// }
+
+// func TestWildcard(t *testing.T) {
+// 	okp(t, &test{
+// 		inserts: []*insert{
+// 			{route: "/:path*"},
+// 			{route: "/users/:id/:file*"},
+// 			{route: "/api/v.:version*"},
+// 		},
+// 		requests: []*request{
+// 			{path: "/10", route: "/:path*", slots: `path=10`},
+// 			{path: "/10/20", route: "/:path*", slots: `path=10/20`},
+// 			{path: "/users/10/dir/file.json", route: "/users/:id/:file*", slots: `file=dir/file.json&id=10`},
+// 			{path: "/api/v.2/1", route: "/api/v.:version*", slots: `version=2/1`},
+// 			{path: "/api/v.2.1", route: "/api/v.:version*", slots: `version=2.1`},
+// 		},
+// 	})
+// 	ok(t, &test{
+// 		inserts: []*insert{
+// 			{route: "/not/:last*/path", err: `route "/not/:last*/path": wildcard "*" must be at the end`},
+// 			{route: "/slash/:last*/", err: `route "/slash/:last*/": wildcard "*" must be at the end`},
+// 		},
+// 	})
+// }

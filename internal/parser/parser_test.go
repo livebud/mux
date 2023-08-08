@@ -48,15 +48,15 @@ func TestSample(t *testing.T) {
 	equal(t, `/{na me}`, `invalid character ' ' in slot`)
 	equal(t, `/hello/{name}`, `/hello/{name}`)
 	equal(t, `hello/{name}`, `path must start with a slash /`)
-	equal(t, `/hello/{name}/`, `/hello/{name}`)
+	equal(t, `/hello/{name}/`, `/hello/{name}/`)
 	equal(t, `/hello/{name?}`, `/hello/{name?}`)
 	equal(t, `/hello/{name*}`, `/hello/{name*}`)
-	equal(t, `/hel_lo/`, `/hel_lo`)
+	equal(t, `/hel_lo/`, `/hel_lo/`)
 	equal(t, `/hel lo/`, `unexpected character ' ' in path`)
 	equal(t, `/hello/{*name}`, `slot can't start with '*'`)
 	equal(t, `/hello/{na*me}`, `expected '}' but got 'me'`)
 	equal(t, `/hello/{name}/admin`, `/hello/{name}/admin`)
-	equal(t, `/hello/{name}/admin/`, `/hello/{name}/admin`)
+	equal(t, `/hello/{name}/admin/`, `/hello/{name}/admin/`)
 	equal(t, `/hello/{name}/{owner}`, `/hello/{name}/{owner}`)
 	equal(t, `/hello/{name`, `unclosed slot`)
 	equal(t, `/hello/{name|[A-Za-z]}`, `/hello/{name|[A-Za-z]}`)
@@ -65,10 +65,10 @@ func TestSample(t *testing.T) {
 
 func TestAll(t *testing.T) {
 	equal(t, "a", `path must start with a slash /`)
-	equal(t, "/a/", `/a`)
+	equal(t, "/a/", `/a/`)
 	equal(t, "/", `/`)
 	equal(t, "/hi", `/hi`)
-	equal(t, "/doc/", `/doc`)
+	equal(t, "/doc/", `/doc/`)
 	equal(t, "/doc/go_faq.html", `/doc/go_faq.html`)
 	equal(t, "α", `path must start with a slash /`)
 	equal(t, "/α", `/α`)
@@ -93,7 +93,7 @@ func TestAll(t *testing.T) {
 	equal(t, "/{-a}/{b?}", `slot can't start with '-'`)
 	equal(t, "/{a-b}", `invalid character '-' in slot`)
 	equal(t, "{a}", `path must start with a slash /`)
-	equal(t, "/{a}/", `/{a}`)
+	equal(t, "/{a}/", `/{a}/`)
 	equal(t, "/{café}", `invalid character 'é' in slot`)
 	equal(t, "/about", `/about`)
 	equal(t, "/deactivate", `/deactivate`)
@@ -122,7 +122,3 @@ func TestAll(t *testing.T) {
 	equal(t, "/{sloT}", `invalid character 'T' in slot`)
 	equal(t, "/{sloT}/", `invalid character 'T' in slot`)
 }
-
-// func TestResultSet(t *testing.T) {
-// 	equal(t, "/first/{name?}", `/first`. )
-// }

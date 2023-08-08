@@ -72,7 +72,8 @@ func (r *Route) Expand() (routes []*Route) {
 type Section interface {
 	Node
 	Len() int
-	Match(path string) (index int)
+	Match(path string) (index int, slots []string)
+	Priority() int
 }
 
 type Sections []Section
@@ -185,14 +186,15 @@ func (p *Slash) Len() int {
 	return 1
 }
 
-func (p *Slash) Match(path string) (index int) {
-	if len(path) == 0 {
-		return -1
-	}
+func (p *Slash) Match(path string) (index int, slots []string) {
 	if path[0] == '/' {
-		return 1
+		index++
 	}
-	return -1
+	return index, slots
+}
+
+func (p *Slash) Priority() int {
+	return 1
 }
 
 type Path struct {
@@ -207,22 +209,26 @@ func (p *Path) Len() int {
 	return len(p.Value)
 }
 
-func (p *Path) Match(path string) (index int) {
+func (p *Path) Match(path string) (index int, slots []string) {
 	valueLen := p.Len()
 	if len(path) < valueLen {
-		return -1
+		return index, slots
 	}
 	prefix := strings.ToLower(path[:valueLen])
 	if prefix != p.Value {
-		return -1
+		return index, slots
 	}
-	return valueLen
+	return valueLen, slots
+}
+
+func (p *Path) Priority() int {
+	return 1
 }
 
 type Slot interface {
 	Node
 	Section
-	slot()
+	Slot() string
 }
 
 var (
@@ -240,23 +246,31 @@ func (s *RequiredSlot) Len() int {
 	return 1
 }
 
-func (s *RequiredSlot) slot() {}
+func (s *RequiredSlot) Slot() string {
+	return s.Key
+}
 
 func (s *RequiredSlot) String() string {
 	return "{" + s.Key + "}"
 }
 
-func (s *RequiredSlot) Match(path string) (index int) {
-	return -1
-	// valueLen := s.Len()
-	// if len(path) < valueLen {
-	// 	return -1
-	// }
-	// prefix := strings.ToLower(path[:valueLen])
-	// if prefix != p.Value {
-	// 	return -1
-	// }
-	// return valueLen
+func (s *RequiredSlot) Match(path string) (index int, slots []string) {
+	lpath := len(path)
+	for i := 0; i < lpath; i++ {
+		if path[i] == '.' || path[i] == '/' {
+			break
+		}
+		index++
+	}
+	if index == 0 {
+		return index, slots
+	}
+	slots = append(slots, path[:index])
+	return index, slots
+}
+
+func (p *RequiredSlot) Priority() int {
+	return 0
 }
 
 type OptionalSlot struct {
@@ -267,14 +281,20 @@ func (s *OptionalSlot) Len() int {
 	return 1
 }
 
-func (s *OptionalSlot) slot() {}
+func (s *OptionalSlot) Slot() string {
+	return s.Key
+}
 
 func (o *OptionalSlot) String() string {
 	return "{" + o.Key + "?}"
 }
 
-func (s *OptionalSlot) Match(path string) (index int) {
-	return -1
+func (s *OptionalSlot) Match(path string) (index int, slots []string) {
+	return 0, slots
+}
+
+func (p *OptionalSlot) Priority() int {
+	return 0
 }
 
 type WildcardSlot struct {
@@ -285,14 +305,20 @@ func (s *WildcardSlot) Len() int {
 	return 1
 }
 
-func (s *WildcardSlot) slot() {}
+func (s *WildcardSlot) Slot() string {
+	return s.Key
+}
 
 func (w *WildcardSlot) String() string {
 	return "{" + w.Key + "*}"
 }
 
-func (s *WildcardSlot) Match(path string) (index int) {
-	return -1
+func (s *WildcardSlot) Match(path string) (index int, slots []string) {
+	return 0, slots
+}
+
+func (p *WildcardSlot) Priority() int {
+	return 0
 }
 
 type RegexpSlot struct {
@@ -304,12 +330,18 @@ func (s *RegexpSlot) Len() int {
 	return 1
 }
 
-func (s *RegexpSlot) slot() {}
+func (s *RegexpSlot) Slot() string {
+	return s.Key
+}
 
 func (r *RegexpSlot) String() string {
 	return "{" + r.Key + "|" + r.Pattern.String() + "}"
 }
 
-func (s *RegexpSlot) Match(path string) (index int) {
-	return -1
+func (s *RegexpSlot) Match(path string) (index int, slots []string) {
+	return 0, slots
+}
+
+func (p *RegexpSlot) Priority() int {
+	return 0
 }
