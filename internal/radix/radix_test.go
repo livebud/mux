@@ -764,4 +764,14 @@ func TestMatchRegexp(t *testing.T) {
 			{"/second", `/{name} name=second`},
 		}},
 	})
+	matchEqual(t, Routes{
+		{"/v{version}", Requests{}},
+		{"/v{major|[0-9]}.{minor|[0-9]}", Requests{}},
+		{"/v{major|[0-9]}.{minor|[0-9]}.{patch|[0-9]}", Requests{
+			{"/v1.2.3", `/v{major|^[0-9]$}.{minor|^[0-9]$}.{patch|^[0-9]$} major=1&minor=2&patch=3`},
+			{"/v1.2", `/v{major|^[0-9]$}.{minor|^[0-9]$} major=1&minor=2`},
+			{"/v1", `/v{version} version=1`},
+			{"/valpha.beta.omega", `/v{version} version=alpha.beta.omega`},
+		}},
+	})
 }
