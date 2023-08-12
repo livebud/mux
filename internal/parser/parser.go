@@ -62,7 +62,7 @@ func (p *Parser) parseSection() (ast.Section, error) {
 }
 
 func (p *Parser) parseSlash() (*ast.Slash, error) {
-	return &ast.Slash{}, nil
+	return &ast.Slash{Value: "/"}, nil
 }
 
 func (p *Parser) parsePath() (*ast.Path, error) {
@@ -91,9 +91,21 @@ func (p *Parser) parseSlot() (ast.Slot, error) {
 func (p *Parser) parseOptionalSlot(key string) (*ast.OptionalSlot, error) {
 	node := &ast.OptionalSlot{
 		Key: key,
+		Delimiters: map[byte]bool{
+			'/': true,
+		},
 	}
 	if err := p.expect(token.CloseCurly); err != nil {
 		return nil, err
+	}
+	if err := p.expect(token.End); err != nil {
+		return nil, fmt.Errorf("optional slots must be at the end of the path")
+	}
+	switch tok := p.l.Peak(1); tok.Type {
+	case token.Path:
+		node.Delimiters[tok.Text[0]] = true
+	case token.OpenCurly:
+		return nil, &ErrSlotAfterSlot{key}
 	}
 	return node, nil
 }
@@ -101,6 +113,9 @@ func (p *Parser) parseOptionalSlot(key string) (*ast.OptionalSlot, error) {
 func (p *Parser) parseWildcardSlot(key string) (*ast.WildcardSlot, error) {
 	node := &ast.WildcardSlot{
 		Key: key,
+		Delimiters: map[byte]bool{
+			'/': true,
+		},
 	}
 	if err := p.expect(token.CloseCurly); err != nil {
 		return nil, err
@@ -108,12 +123,21 @@ func (p *Parser) parseWildcardSlot(key string) (*ast.WildcardSlot, error) {
 	if err := p.expect(token.End); err != nil {
 		return nil, fmt.Errorf("wildcard slots must be at the end of the path")
 	}
+	switch tok := p.l.Peak(1); tok.Type {
+	case token.Path:
+		node.Delimiters[tok.Text[0]] = true
+	case token.OpenCurly:
+		return nil, &ErrSlotAfterSlot{key}
+	}
 	return node, nil
 }
 
 func (p *Parser) parseRegexpSlot(key string) (*ast.RegexpSlot, error) {
 	node := &ast.RegexpSlot{
 		Key: key,
+		Delimiters: map[byte]bool{
+			'/': true,
+		},
 	}
 	if err := p.expect(token.Regexp); err != nil {
 		return nil, err
@@ -126,15 +150,30 @@ func (p *Parser) parseRegexpSlot(key string) (*ast.RegexpSlot, error) {
 	if err := p.expect(token.CloseCurly); err != nil {
 		return nil, err
 	}
+	switch tok := p.l.Peak(1); tok.Type {
+	case token.Path:
+		node.Delimiters[tok.Text[0]] = true
+	case token.OpenCurly:
+		return nil, &ErrSlotAfterSlot{key}
+	}
 	return node, nil
 }
 
 func (p *Parser) parseRequiredSlot(key string) (*ast.RequiredSlot, error) {
 	node := &ast.RequiredSlot{
 		Key: key,
+		Delimiters: map[byte]bool{
+			'/': true,
+		},
 	}
 	if err := p.expect(token.CloseCurly); err != nil {
 		return nil, err
+	}
+	switch tok := p.l.Peak(1); tok.Type {
+	case token.Path:
+		node.Delimiters[tok.Text[0]] = true
+	case token.OpenCurly:
+		return nil, &ErrSlotAfterSlot{key}
 	}
 	return node, nil
 }
@@ -178,4 +217,12 @@ func (p *Parser) expect(tokens ...token.Type) error {
 		p.l.Next()
 	}
 	return nil
+}
+
+type ErrSlotAfterSlot struct {
+	Slot string
+}
+
+func (e *ErrSlotAfterSlot) Error() string {
+	return fmt.Sprintf("slot %q can't have another slot after", e.Slot)
 }

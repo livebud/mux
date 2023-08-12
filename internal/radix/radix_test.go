@@ -267,12 +267,20 @@ func TestRootSwap(t *testing.T) {
 func TestPriority(t *testing.T) {
 	tree := radix.New()
 	insertEqual(t, tree, "/v{version}", `
-		/v{version} [routable=/v{version}]
+	/v{version} [routable=/v{version}]
 	`)
 	insertEqual(t, tree, "/v2", `
-		/v
-		••2 [routable=/v2]
-		••{version} [routable=/v{version}]
+	/v
+	••2 [routable=/v2]
+	••{version} [routable=/v{version}]
+	`)
+	tree = radix.New()
+	insertEqual(t, tree, "/v{version}", `
+		/v{version} [routable=/v{version}]
+	`)
+	insertEqual(t, tree, "/v{major}.{minor}.{patch}", `
+		/v{version} [routable=/v{version}]
+		•••••••••••.{minor}.{patch} [routable=/v{major}.{minor}.{patch}]
 	`)
 }
 
@@ -286,6 +294,14 @@ func TestSlotSplit(t *testing.T) {
 		•••••••settings [routable=/users/settings]
 		•••••••{id}/edit [routable=/users/{id}/edit]
 	`)
+}
+
+func TestInvalidSlot(t *testing.T) {
+	tree := radix.New()
+	insertEqual(t, tree, "/{a}", `
+		/{a} [routable=/{a}]
+	`)
+	insertEqual(t, tree, "/{a}{b}", `slot "a" can't have another slot after`)
 }
 
 type Routes []Route
@@ -519,67 +535,99 @@ func TestMatchUnicode(t *testing.T) {
 	})
 }
 
-// func TestOptional(t *testing.T) {
-// 	okp(t, &test{
-// 		inserts: []*insert{
-// 			{route: "/:id?"},
-// 			{route: "/users/:id.:format?"},
-// 			{route: "/users/v:version?"},
-// 			{route: "/flights/:from/:to?"},
-// 		},
-// 		requests: []*request{
-// 			{path: "/", route: "/:id?"},
-// 			{path: "/10", route: "/:id?", slots: `id=10`},
-// 			{path: "/a", route: "/:id?", slots: `id=a`},
+func TestOptional(t *testing.T) {
+	matchEqual(t, Routes{
+		{"/{id?}", Requests{}},
+		{"/users/{id}.{format?}", Requests{}},
+		{"/users/v{version?}", Requests{}},
+		{"/flights/{from}/{to?}", Requests{
+			{"/", "/"},
+			{"/10", "/{id} id=10"},
+			{"/a", "/{id} id=a"},
 
-// 			{path: "/users/10", route: "/users/:id.:format?", slots: `id=10`},
-// 			{path: "/users/10/", nomatch: true},
-// 			{path: "/users/10.json", route: "/users/:id.:format?", slots: `format=json&id=10`},
-// 			{path: "/users/10.rss", route: "/users/:id.:format?", slots: `format=rss&id=10`},
-// 			{path: "/users/index.html", route: "/users/:id.:format?", slots: `format=html&id=index`},
-// 			{path: "/users/ü.html", route: "/users/:id.:format?", slots: `format=html&id=ü`},
-// 			{path: "/users/index.html/more", nomatch: true},
+			{"/users/10", `no match for "/users/10"`},
+			{"/users/10/", `no match for "/users/10"`},
+			{"/users/10.json", "/users/{id}.{format} format=json&id=10"},
+			{"/users/10.rss", "/users/{id}.{format} format=rss&id=10"},
+			{"/users/index.html", "/users/{id}.{format} format=html&id=index"},
+			{"/users/ü.html", "/users/{id}.{format} format=html&id=%C3%BC"},
+			{"/users/index.html/more", `no match for "/users/index.html/more"`},
 
-// 			{path: "/users", route: "/users/v:version?"},
-// 			{path: "/users/", nomatch: true},
-// 			{path: "/users/v10", route: "/users/v:version?", slots: `version=10`},
-// 			{path: "/users/v1", route: "/users/v:version?", slots: `version=1`},
+			{"/users", "/{id} id=users"},
+			{"/users/", `/{id} id=users`},
+			{"/users/v10", "/users/v{version} version=10"},
+			{"/users/v1", "/users/v{version} version=1"},
 
-// 			{path: "/flights/Berlin", route: "/flights/:from/:to?", slots: `from=Berlin`},
-// 			{path: "/flights/Berlin/", nomatch: true},
-// 			{path: "/flights/Berlin/Madison", route: "/flights/:from/:to?", slots: `from=Berlin&to=Madison`},
-// 		},
-// 	})
-// 	ok(t, &test{
-// 		inserts: []*insert{
-// 			{route: "/:id?"},
-// 			{route: "/:a.:b?", err: `radix: ambiguous routes "/:a.:b?" and "/:id?"`},
-// 			{route: "/x:id?"},
-// 			{route: "/not/:last?/path", err: `route "/not/:last?/path": optional "?" must be at the end`},
-// 			{route: "/slash/:last?/", err: `route "/slash/:last?/": optional "?" must be at the end`},
-// 		},
-// 	})
-// }
+			{"/flights/Berlin", "/flights/{from} from=Berlin"},
+			{"/flights/Berlin/", `/flights/{from} from=Berlin`},
+			{"/flights/Berlin/Madison", "/flights/{from}/{to} from=Berlin&to=Madison"},
+		}},
+	})
+}
 
-// func TestWildcard(t *testing.T) {
-// 	okp(t, &test{
-// 		inserts: []*insert{
-// 			{route: "/:path*"},
-// 			{route: "/users/:id/:file*"},
-// 			{route: "/api/v.:version*"},
-// 		},
-// 		requests: []*request{
-// 			{path: "/10", route: "/:path*", slots: `path=10`},
-// 			{path: "/10/20", route: "/:path*", slots: `path=10/20`},
-// 			{path: "/users/10/dir/file.json", route: "/users/:id/:file*", slots: `file=dir/file.json&id=10`},
-// 			{path: "/api/v.2/1", route: "/api/v.:version*", slots: `version=2/1`},
-// 			{path: "/api/v.2.1", route: "/api/v.:version*", slots: `version=2.1`},
-// 		},
-// 	})
-// 	ok(t, &test{
-// 		inserts: []*insert{
-// 			{route: "/not/:last*/path", err: `route "/not/:last*/path": wildcard "*" must be at the end`},
-// 			{route: "/slash/:last*/", err: `route "/slash/:last*/": wildcard "*" must be at the end`},
-// 		},
-// 	})
-// }
+func TestLastOptional(t *testing.T) {
+	tree := radix.New()
+	insertEqual(t, tree, "/slash/{last?}/", `
+		/slash [routable=/slash]
+		••••••/{last} [routable=/slash/{last}]
+	`)
+	insertEqual(t, tree, "/not/{last?}/path", `optional slots must be at the end of the path`)
+}
+
+func TestWildcard(t *testing.T) {
+	matchEqual(t, Routes{
+		{"/{path*}", Requests{}},
+		{"/users/{id}/{file*}", Requests{}},
+		{"/api/v.{version*}", Requests{
+			{"/", `/`},
+			{"/10", `/{path*} path=10`},
+			{"/10/20", `/{path*} path=10%2F20`},
+			{"/users/10/dir/file.json", `/users/{id}/{file*} file=dir%2Ffile.json&id=10`},
+			{"/users/10/dir", `/users/{id}/{file*} file=dir&id=10`},
+			{"/users/10", `/users/{id} id=10`},
+			{"/api/v.2/1", `/api/v.{version*} version=2%2F1`},
+			{"/api/v.2.1", `/api/v.{version*} version=2.1`},
+			{"/api/v.", `/api/v.`},
+			{"/api/v", `/{path*} path=api%2Fv`},
+		}},
+	})
+}
+
+func TestLastWildcard(t *testing.T) {
+	tree := radix.New()
+	insertEqual(t, tree, "/slash/{last*}/", `
+		/slash [routable=/slash]
+		••••••/{last*} [routable=/slash/{last*}]
+	`)
+	insertEqual(t, tree, "/not/{last*}/path", `wildcard slots must be at the end of the path`)
+}
+
+func TestMatchDashedSlots(t *testing.T) {
+	matchEqual(t, Routes{
+		{"/{a}-{b}", Requests{
+			{"/hello-world", `/{a}-{b} a=hello&b=world`},
+			{"/a-b", `/{a}-{b} a=a&b=b`},
+			{"/A-B", `/{a}-{b} a=A&b=B`},
+			{"/AB", `no match for "/AB"`},
+		}},
+	})
+}
+
+func TestBackupTree(t *testing.T) {
+	is := is.New(t)
+	tree := radix.New()
+	insertEqual(t, tree, "/{post_id}/comments", `
+		/{post_id}/comments [routable=/{post_id}/comments]
+	`)
+	insertEqual(t, tree, "/{post_id}.{format}", `
+		/{post_id}
+		••••••••••/comments [routable=/{post_id}/comments]
+		••••••••••.{format} [routable=/{post_id}.{format}]
+	`)
+	match, err := tree.Match("/10/comments")
+	is.NoErr(err)
+	is.Equal(match.String(), `/{post_id}/comments post_id=10`)
+	match, err = tree.Match("/10.json")
+	is.NoErr(err)
+	is.Equal(match.String(), `/{post_id}.{format} format=json&post_id=10`)
+}

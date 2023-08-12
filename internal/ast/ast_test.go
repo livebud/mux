@@ -62,7 +62,7 @@ func TestExpand(t *testing.T) {
 	expandEqual(t, "/{name}", "/{name}")
 	expandEqual(t, "/{name?}", "/", "/{name}")
 	expandEqual(t, "/first/{name?}", "/first", "/first/{name}")
-	expandEqual(t, "/{first?}/{last?}", "/", "/{first}", "/{first}/{last}")
+	expandEqual(t, "/{first?}/{last?}", "optional slots must be at the end of the path")
 	expandEqual(t, "/{name*}", "/", "/{name*}")
 	expandEqual(t, "/first/{name*}", "/first", "/first/{name*}")
 	expandEqual(t, "/{first*}/{last*}", "wildcard slots must be at the end of the path")

@@ -56,7 +56,10 @@ func (r *Route) Expand() (routes []*Route) {
 				Sections: route.Sections[:i],
 			}))
 			// Create a new route with the slot required
-			route.Sections[i] = &RequiredSlot{Key: s.Key}
+			route.Sections[i] = &RequiredSlot{
+				Key:        s.Key,
+				Delimiters: s.Delimiters,
+			}
 		case *WildcardSlot:
 			// Create route before the wildcard slot
 			routes = append(routes, trimRightSlash(&Route{
@@ -72,11 +75,24 @@ func (r *Route) Expand() (routes []*Route) {
 type Section interface {
 	Node
 	Len() int
+	Compare(s Section) (index int, equal bool)
 	Match(path string) (index int, slots []string)
 	Priority() int
 }
 
 type Sections []Section
+
+func (sections Sections) LongestCommonPrefix(secs Sections) (lcp int) {
+	max := min(len(sections), len(secs))
+	for i := 0; i < max; i++ {
+		index, equal := sections[i].Compare(secs[i])
+		lcp += index + 1
+		if !equal {
+			return lcp
+		}
+	}
+	return lcp
+}
 
 func (sections Sections) At(n int) string {
 	for _, section := range sections {
@@ -178,6 +194,22 @@ type Slash struct {
 	Value string
 }
 
+func (s *Slash) Compare(sec Section) (index int, equal bool) {
+	index = -1
+	s2, ok := sec.(*Slash)
+	if !ok {
+		return index, false
+	}
+	max := min(len(s.Value), len(s2.Value))
+	for i := 0; i < max; i++ {
+		if s.Value[i] != s2.Value[i] {
+			return index, false
+		}
+		index++
+	}
+	return index, true
+}
+
 func (s *Slash) String() string {
 	return "/"
 }
@@ -205,6 +237,24 @@ func (p *Path) String() string {
 	return p.Value
 }
 
+func (p *Path) Compare(sec Section) (index int, equal bool) {
+	index = -1
+	p2, ok := sec.(*Path)
+	if !ok {
+		return index, false
+	}
+	r := []rune(p.Value)
+	r2 := []rune(p2.Value)
+	max := min(len(r), len(r2))
+	for i := 0; i < max; i++ {
+		if r[i] != r2[i] {
+			return index, false
+		}
+		index++
+	}
+	return index, true
+}
+
 func (p *Path) Len() int {
 	return len(p.Value)
 }
@@ -229,6 +279,7 @@ type Slot interface {
 	Node
 	Section
 	Slot() string
+	delimiters() map[byte]bool
 }
 
 var (
@@ -239,7 +290,31 @@ var (
 )
 
 type RequiredSlot struct {
-	Key string
+	Key        string
+	Delimiters map[byte]bool
+}
+
+func (s *RequiredSlot) delimiters() map[byte]bool {
+	return s.Delimiters
+}
+
+// Compare a slot to another section
+// Note: this can modify the slot's delimiters. I couldn't find a better spot
+// for this logic.
+func (s *RequiredSlot) Compare(sec Section) (index int, equal bool) {
+	index = -1
+	s2, ok := sec.(Slot)
+	if !ok {
+		return index, false
+	}
+	// Merge the delimiter list
+	for k := range s2.delimiters() {
+		s.Delimiters[k] = true
+	}
+	// Different keys don't matter for comparison
+	// and slots count as one character
+	index++
+	return index, true
 }
 
 func (s *RequiredSlot) Len() int {
@@ -257,7 +332,7 @@ func (s *RequiredSlot) String() string {
 func (s *RequiredSlot) Match(path string) (index int, slots []string) {
 	lpath := len(path)
 	for i := 0; i < lpath; i++ {
-		if path[i] == '.' || path[i] == '/' {
+		if s.Delimiters[path[i]] {
 			break
 		}
 		index++
@@ -274,11 +349,35 @@ func (p *RequiredSlot) Priority() int {
 }
 
 type OptionalSlot struct {
-	Key string
+	Key        string
+	Delimiters map[byte]bool
+}
+
+func (s *OptionalSlot) delimiters() map[byte]bool {
+	return s.Delimiters
 }
 
 func (s *OptionalSlot) Len() int {
 	return 1
+}
+
+// Compare a slot to another section
+// Note: this can modify the slot's delimiters. I couldn't find a better spot
+// for this logic.
+func (s *OptionalSlot) Compare(sec Section) (index int, equal bool) {
+	index = -1
+	s2, ok := sec.(Slot)
+	if !ok {
+		return index, false
+	}
+	// Merge the delimiter list
+	for k := range s2.delimiters() {
+		s.Delimiters[k] = true
+	}
+	// Different keys don't matter for comparison
+	// and slots count as one character.
+	index++
+	return index, true
 }
 
 func (s *OptionalSlot) Slot() string {
@@ -298,11 +397,35 @@ func (p *OptionalSlot) Priority() int {
 }
 
 type WildcardSlot struct {
-	Key string
+	Key        string
+	Delimiters map[byte]bool
+}
+
+func (s *WildcardSlot) delimiters() map[byte]bool {
+	return s.Delimiters
 }
 
 func (s *WildcardSlot) Len() int {
 	return 1
+}
+
+// Compare a slot to another section
+// Note: this can modify the slot's delimiters. I couldn't find a better spot
+// for this logic.
+func (s *WildcardSlot) Compare(sec Section) (index int, equal bool) {
+	index = -1
+	s2, ok := sec.(Slot)
+	if !ok {
+		return index, false
+	}
+	// Merge the delimiter list
+	for k := range s2.delimiters() {
+		s.Delimiters[k] = true
+	}
+	// Different keys don't matter for comparison
+	// and slots count as one character.
+	index++
+	return index, true
 }
 
 func (s *WildcardSlot) Slot() string {
@@ -314,7 +437,8 @@ func (w *WildcardSlot) String() string {
 }
 
 func (s *WildcardSlot) Match(path string) (index int, slots []string) {
-	return 0, slots
+	slots = append(slots, path)
+	return len(path), slots
 }
 
 func (p *WildcardSlot) Priority() int {
@@ -322,12 +446,36 @@ func (p *WildcardSlot) Priority() int {
 }
 
 type RegexpSlot struct {
-	Key     string
-	Pattern *regexp.Regexp
+	Key        string
+	Pattern    *regexp.Regexp
+	Delimiters map[byte]bool
+}
+
+func (s *RegexpSlot) delimiters() map[byte]bool {
+	return s.Delimiters
 }
 
 func (s *RegexpSlot) Len() int {
 	return 1
+}
+
+// Compare a slot to another section
+// Note: this can modify the slot's delimiters. I couldn't find a better spot
+// for this logic.
+func (s *RegexpSlot) Compare(sec Section) (index int, equal bool) {
+	index = -1
+	s2, ok := sec.(Slot)
+	if !ok {
+		return index, false
+	}
+	// Merge the delimiter list
+	for k := range s2.delimiters() {
+		s.Delimiters[k] = true
+	}
+	// Different keys don't matter for comparison
+	// and slots count as one character.
+	index++
+	return index, true
 }
 
 func (s *RegexpSlot) Slot() string {

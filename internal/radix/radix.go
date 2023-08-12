@@ -43,7 +43,6 @@ func (t *Tree) insert(route *ast.Route) error {
 		}
 		return nil
 	}
-	// fmt.Println("inserting", route)
 	return t.root.insert(route, route.Sections)
 }
 
@@ -69,7 +68,6 @@ func (n Nodes) Len() int {
 }
 
 func (n Nodes) Less(i, j int) bool {
-	// fmt.Println("i", n[i].sections, n[i].Priority(), "j", n[j].sections, n[j].Priority(), n[i].Priority() < n[j].Priority())
 	return n[i].Priority() > n[j].Priority()
 }
 
@@ -78,7 +76,7 @@ func (n Nodes) Swap(i, j int) {
 }
 
 func (n *Node) insert(route *ast.Route, sections ast.Sections) error {
-	lcp := longestCommonPrefix(n.sections, sections)
+	lcp := n.sections.LongestCommonPrefix(sections)
 	if lcp < n.sections.Len() {
 		// Split the node's sections
 		parts := n.sections.Split(lcp)
@@ -183,6 +181,9 @@ func (t *Tree) Match(path string) (*Match, error) {
 
 func (n *Node) Match(path string, slotValues []string) (*Match, bool) {
 	for _, section := range n.sections {
+		if len(path) == 0 {
+			return nil, false
+		}
 		index, slots := section.Match(path)
 		if index <= 0 {
 			return nil, false
