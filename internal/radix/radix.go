@@ -104,12 +104,16 @@ func (n *Node) insert(route *ast.Route, sections ast.Sections) error {
 	}
 	// Route already exists
 	if lcp == sections.Len() {
+		if n.Route == nil {
+			n.Route = route
+			return nil
+		}
 		oldRoute := n.Route.String()
 		newRoute := route.String()
 		if oldRoute == newRoute {
 			return fmt.Errorf("%w already exists %q", ErrDuplicate, oldRoute)
 		}
-		return fmt.Errorf("%w %q is ambigous with %q", ErrDuplicate, newRoute, oldRoute)
+		return fmt.Errorf("%w %q is ambiguous with %q", ErrDuplicate, newRoute, oldRoute)
 	}
 	// Check children for a match
 	remainingSections := sections.Split(lcp)[1]

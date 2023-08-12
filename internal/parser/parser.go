@@ -142,7 +142,15 @@ func (p *Parser) parseRegexpSlot(key string) (*ast.RegexpSlot, error) {
 	if err := p.expect(token.Regexp); err != nil {
 		return nil, err
 	}
-	regex, err := regexp.Compile(p.tokenText())
+	pattern := p.tokenText()
+	// Trim leading ^ and trailing $ if present
+	if pattern[0] == '^' {
+		pattern = pattern[1:]
+	}
+	if pattern[len(pattern)-1] == '$' {
+		pattern = pattern[:len(pattern)-1]
+	}
+	regex, err := regexp.Compile("^" + pattern + "$")
 	if err != nil {
 		return nil, err
 	}

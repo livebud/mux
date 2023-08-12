@@ -109,9 +109,14 @@ func (sections Sections) At(n int) string {
 				}
 				n--
 			}
-		case *RequiredSlot, *OptionalSlot, *WildcardSlot, *RegexpSlot:
+		case *RequiredSlot, *OptionalSlot, *WildcardSlot:
 			if n == 0 {
 				return "{slot}"
+			}
+			n--
+		case *RegexpSlot:
+			if n == 0 {
+				return "{slot|" + s.Pattern.String() + "}"
 			}
 			n--
 		}
@@ -226,7 +231,7 @@ func (p *Slash) Match(path string) (index int, slots []string) {
 }
 
 func (p *Slash) Priority() int {
-	return 1
+	return 2
 }
 
 type Path struct {
@@ -272,7 +277,7 @@ func (p *Path) Match(path string) (index int, slots []string) {
 }
 
 func (p *Path) Priority() int {
-	return 1
+	return 2
 }
 
 type Slot interface {
@@ -305,6 +310,8 @@ func (s *RequiredSlot) Compare(sec Section) (index int, equal bool) {
 	index = -1
 	s2, ok := sec.(Slot)
 	if !ok {
+		return index, false
+	} else if _, ok := s2.(*RegexpSlot); ok {
 		return index, false
 	}
 	// Merge the delimiter list
@@ -417,6 +424,8 @@ func (s *WildcardSlot) Compare(sec Section) (index int, equal bool) {
 	s2, ok := sec.(Slot)
 	if !ok {
 		return index, false
+	} else if _, ok := s2.(*RegexpSlot); ok {
+		return index, false
 	}
 	// Merge the delimiter list
 	for k := range s2.delimiters() {
@@ -464,8 +473,10 @@ func (s *RegexpSlot) Len() int {
 // for this logic.
 func (s *RegexpSlot) Compare(sec Section) (index int, equal bool) {
 	index = -1
-	s2, ok := sec.(Slot)
+	s2, ok := sec.(*RegexpSlot)
 	if !ok {
+		return index, false
+	} else if s.Pattern.String() != s2.Pattern.String() {
 		return index, false
 	}
 	// Merge the delimiter list
@@ -487,9 +498,27 @@ func (r *RegexpSlot) String() string {
 }
 
 func (s *RegexpSlot) Match(path string) (index int, slots []string) {
-	return 0, slots
+	i := delimiterAt(s.Delimiters, path)
+	prefix := path[:i]
+	if !s.Pattern.MatchString(prefix) {
+		return 0, slots
+	}
+	slots = append(slots, prefix)
+	return i, slots
 }
 
 func (p *RegexpSlot) Priority() int {
-	return 0
+	return 1
+}
+
+func delimiterAt(delimiters map[byte]bool, path string) int {
+	index := 0
+	lpath := len(path)
+	for i := 0; i < lpath; i++ {
+		if delimiters[path[i]] {
+			break
+		}
+		index++
+	}
+	return index
 }

@@ -140,7 +140,7 @@ func TestEqual(t *testing.T) {
 	insertEqual(t, tree, "/{name}", `
 		/{name} [routable=/{name}]
 	`)
-	insertEqual(t, tree, "/{title}", `route "/{title}" is ambigous with "/{name}"`)
+	insertEqual(t, tree, "/{title}", `route "/{title}" is ambiguous with "/{name}"`)
 }
 
 func TestDifferentSlots(t *testing.T) {
@@ -251,7 +251,65 @@ func TestWildcards(t *testing.T) {
 	`)
 }
 
-// TODO: test regexps
+func TestInsertRegexp(t *testing.T) {
+	tree := radix.New()
+	insertEqual(t, tree, "/{name|[A-Z]}", `
+		/{name|^[A-Z]$} [routable=/{name|^[A-Z]$}]
+	`)
+	insertEqual(t, tree, "/{path|[0-9]}", `
+		/
+		•{name|^[A-Z]$} [routable=/{name|^[A-Z]$}]
+		•{path|^[0-9]$} [routable=/{path|^[0-9]$}]
+	`)
+	insertEqual(t, tree, "/{digits|^[0-9]$}", `route "/{digits|^[0-9]$}" is ambiguous with "/{path|^[0-9]$}"`)
+	insertEqual(t, tree, "/first/last", `
+		/
+		•first/last [routable=/first/last]
+		•{name|^[A-Z]$} [routable=/{name|^[A-Z]$}]
+		•{path|^[0-9]$} [routable=/{path|^[0-9]$}]
+	`)
+	insertEqual(t, tree, "/{name}", `
+		/
+		•first/last [routable=/first/last]
+		•{name|^[A-Z]$} [routable=/{name|^[A-Z]$}]
+		•{path|^[0-9]$} [routable=/{path|^[0-9]$}]
+		•{name} [routable=/{name}]
+	`)
+	insertEqual(t, tree, "/{last*}", `route "/{last*}" is ambiguous with "/{name}"`)
+	insertEqual(t, tree, "/first/{last*}", `
+		/ [routable=/]
+		•first [routable=/first]
+		••••••/
+		•••••••last [routable=/first/last]
+		•••••••{last*} [routable=/first/{last*}]
+		•{name|^[A-Z]$} [routable=/{name|^[A-Z]$}]
+		•{path|^[0-9]$} [routable=/{path|^[0-9]$}]
+		•{name} [routable=/{name}]
+	`)
+	insertEqual(t, tree, "/{path|[0-9]+}", `
+		/ [routable=/]
+		•first [routable=/first]
+		••••••/
+		•••••••last [routable=/first/last]
+		•••••••{last*} [routable=/first/{last*}]
+		•{name|^[A-Z]$} [routable=/{name|^[A-Z]$}]
+		•{path|^[0-9]$} [routable=/{path|^[0-9]$}]
+		•{path|^[0-9]+$} [routable=/{path|^[0-9]+$}]
+		•{name} [routable=/{name}]
+	`)
+}
+
+func TestInsertRegexpSlotFirst(t *testing.T) {
+	tree := radix.New()
+	insertEqual(t, tree, "/{name}", `
+		/{name} [routable=/{name}]
+	`)
+	insertEqual(t, tree, "/{path|[A-Z]+}", `
+		/
+		•{path|^[A-Z]+$} [routable=/{path|^[A-Z]+$}]
+		•{name} [routable=/{name}]
+	`)
+}
 
 func TestRootSwap(t *testing.T) {
 	tree := radix.New()
@@ -630,4 +688,80 @@ func TestBackupTree(t *testing.T) {
 	match, err = tree.Match("/10.json")
 	is.NoErr(err)
 	is.Equal(match.String(), `/{post_id}.{format} format=json&post_id=10`)
+}
+
+func TestToRoutable(t *testing.T) {
+	tree := radix.New()
+	insertEqual(t, tree, "/last", `
+		/last [routable=/last]
+	`)
+	insertEqual(t, tree, "/first", `
+		/
+		•last [routable=/last]
+		•first [routable=/first]
+	`)
+	insertEqual(t, tree, "/{last*}", `
+		/ [routable=/]
+		•last [routable=/last]
+		•first [routable=/first]
+		•{last*} [routable=/{last*}]
+	`)
+}
+
+func TestMatchRegexp(t *testing.T) {
+	matchEqual(t, Routes{
+		{"/{path|[A-Z]}", Requests{
+			{"/A", `/{path|^[A-Z]$} path=A`},
+			{"/B", `/{path|^[A-Z]$} path=B`},
+			{"/Z", `/{path|^[A-Z]$} path=Z`},
+			{"/AB", `no match for "/AB"`},
+		}},
+	})
+	matchEqual(t, Routes{
+		{"/{path|[A-Z]}", Requests{}},
+		{"/{path|[0-9]}", Requests{
+			{"/A", `/{path|^[A-Z]$} path=A`},
+			{"/0", `/{path|^[0-9]$} path=0`},
+			{"/9", `/{path|^[0-9]$} path=9`},
+			{"/09", `no match for "/09"`},
+		}},
+	})
+	matchEqual(t, Routes{
+		{"/{path|[A-Z]}", Requests{}},
+		{"/{path|[0-9]}", Requests{}},
+		{"/{path|[A-Z]+}", Requests{
+			{"/A", `/{path|^[A-Z]$} path=A`},
+			{"/0", `/{path|^[0-9]$} path=0`},
+			{"/9", `/{path|^[0-9]$} path=9`},
+			{"/09", `no match for "/09"`},
+			{"/AB", `/{path|^[A-Z]+$} path=AB`},
+		}},
+	})
+	matchEqual(t, Routes{
+		{"/{name}", Requests{}},
+		{"/{path|[A-Z]}", Requests{}},
+		{"/{path|[0-9]}", Requests{}},
+		{"/{path|[A-Z]+}", Requests{
+			{"/A", `/{path|^[A-Z]$} path=A`},
+			{"/0", `/{path|^[0-9]$} path=0`},
+			{"/9", `/{path|^[0-9]$} path=9`},
+			{"/09", `/{name} name=09`},
+			{"/AB", `/{path|^[A-Z]+$} path=AB`},
+		}},
+	})
+	matchEqual(t, Routes{
+		{"/{name}", Requests{}},
+		{"/{path|[A-Z]}", Requests{}},
+		{"/{path|[0-9]}", Requests{}},
+		{"/first", Requests{}},
+		{"/{path|[A-Z]+}", Requests{
+			{"/A", `/{path|^[A-Z]$} path=A`},
+			{"/0", `/{path|^[0-9]$} path=0`},
+			{"/9", `/{path|^[0-9]$} path=9`},
+			{"/09", `/{name} name=09`},
+			{"/AB", `/{path|^[A-Z]+$} path=AB`},
+			{"/first", `/first`},
+			{"/second", `/{name} name=second`},
+		}},
+	})
 }

@@ -59,8 +59,8 @@ func TestSample(t *testing.T) {
 	equal(t, `/hello/{name}/admin/`, `/hello/{name}/admin/`)
 	equal(t, `/hello/{name}/{owner}`, `/hello/{name}/{owner}`)
 	equal(t, `/hello/{name`, `unclosed slot`)
-	equal(t, `/hello/{name|[A-Za-z]}`, `/hello/{name|[A-Za-z]}`)
-	equal(t, `/hello/{name|[A-Za-z]{1,3}}`, `/hello/{name|[A-Za-z]{1,3}}`)
+	equal(t, `/hello/{name|^[A-Za-z]$}`, `/hello/{name|^[A-Za-z]$}`)
+	equal(t, `/hello/{name|^[A-Za-z]{1,3}$}`, `/hello/{name|^[A-Za-z]{1,3}$}`)
 }
 
 func TestAll(t *testing.T) {
