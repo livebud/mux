@@ -1,6 +1,6 @@
-module github.com/livebud/router
+module github.com/livebud/mux
 
-go 1.21rc3
+go 1.21.0
 
 require (
 	github.com/matryer/is v1.4.0

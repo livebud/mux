@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/livebud/router/internal/radix"
+	"github.com/livebud/mux/internal/radix"
 )
 
 func New() *Router {

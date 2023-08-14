@@ -3,7 +3,7 @@ package lexer_test
 import (
 	"testing"
 
-	"github.com/livebud/router/internal/lexer"
+	"github.com/livebud/mux/internal/lexer"
 	"github.com/matthewmueller/diff"
 )
 

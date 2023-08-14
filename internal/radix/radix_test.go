@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/livebud/router/internal/radix"
+	"github.com/livebud/mux/internal/radix"
 	"github.com/matryer/is"
 	"github.com/matthewmueller/diff"
 )

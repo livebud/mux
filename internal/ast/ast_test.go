@@ -3,7 +3,7 @@ package ast_test
 import (
 	"testing"
 
-	"github.com/livebud/router/internal/parser"
+	"github.com/livebud/mux/internal/parser"
 	"github.com/matryer/is"
 )
 

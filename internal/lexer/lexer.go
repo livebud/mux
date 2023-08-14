@@ -6,7 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/livebud/router/internal/token"
+	"github.com/livebud/mux/internal/token"
 )
 
 type state = func(l *Lexer) token.Type

@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/livebud/router/internal/ast"
-	"github.com/livebud/router/internal/parser"
+	"github.com/livebud/mux/internal/ast"
+	"github.com/livebud/mux/internal/parser"
 )
 
 var ErrDuplicate = fmt.Errorf("route")

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/livebud/router"
+	router "github.com/livebud/mux"
 	"github.com/matthewmueller/diff"
 )
 

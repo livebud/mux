@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/livebud/router/internal/ast"
-	"github.com/livebud/router/internal/lexer"
-	"github.com/livebud/router/internal/token"
+	"github.com/livebud/mux/internal/ast"
+	"github.com/livebud/mux/internal/lexer"
+	"github.com/livebud/mux/internal/token"
 )
 
 func New(l *lexer.Lexer) *Parser {
