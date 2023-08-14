@@ -1,7 +1,6 @@
 package parser_test
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/livebud/router/internal/parser"
@@ -20,22 +19,7 @@ func equal(t *testing.T, input, expected string) {
 			t.Fatal(err)
 		}
 		actual := route.String()
-		if actual == expected {
-			return
-		}
-		var b bytes.Buffer
-		b.WriteString("\n\x1b[4mInput\x1b[0m:\n")
-		b.WriteString(input)
-		b.WriteString("\n\x1b[4mExpected\x1b[0m:\n")
-		b.WriteString(expected)
-		b.WriteString("\n\n")
-		b.WriteString("\x1b[4mActual\x1b[0m: \n")
-		b.WriteString(actual)
-		b.WriteString("\n\n")
-		b.WriteString("\x1b[4mDifference\x1b[0m: \n")
-		b.WriteString(diff.String(expected, actual))
-		b.WriteString("\n")
-		t.Fatal(b.String())
+		diff.TestString(t, expected, actual)
 	})
 }
 

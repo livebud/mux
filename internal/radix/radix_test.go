@@ -1,8 +1,8 @@
 package radix_test
 
 import (
-	"bytes"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -15,7 +15,7 @@ func insertEqual(t *testing.T, tree *radix.Tree, route string, expected string) 
 	t.Helper()
 	t.Run(route, func(t *testing.T) {
 		t.Helper()
-		if err := tree.Insert(route); err != nil {
+		if err := tree.Insert(route, http.NotFoundHandler()); err != nil {
 			if err.Error() == expected {
 				return
 			}
@@ -23,20 +23,7 @@ func insertEqual(t *testing.T, tree *radix.Tree, route string, expected string) 
 		}
 		actual := strings.TrimSpace(tree.String())
 		expected = strings.ReplaceAll(strings.TrimSpace(expected), "\t", "")
-		if actual == expected {
-			return
-		}
-		var b bytes.Buffer
-		b.WriteString("\n\x1b[4mExpected\x1b[0m:\n")
-		b.WriteString(expected)
-		b.WriteString("\n\n")
-		b.WriteString("\x1b[4mActual\x1b[0m: \n")
-		b.WriteString(actual)
-		b.WriteString("\n\n")
-		b.WriteString("\x1b[4mDifference\x1b[0m: \n")
-		b.WriteString(diff.String(expected, actual))
-		b.WriteString("\n")
-		t.Fatal(b.String())
+		diff.TestString(t, expected, actual)
 	})
 }
 
@@ -386,20 +373,12 @@ func matchPath(t *testing.T, tree *radix.Tree, path string, expect string) {
 		t.Fatal(err.Error())
 	}
 	actual := match.String()
-	if actual == expect {
-		return
+	if match.Route != nil && match.Handler == nil {
+		t.Fatalf("routes should always have a handler")
+	} else if match.Handler != nil && match.Route == nil {
+		t.Fatalf("handlers should always have a route")
 	}
-	var b bytes.Buffer
-	b.WriteString("\n\x1b[4mExpected\x1b[0m:\n")
-	b.WriteString(expect)
-	b.WriteString("\n\n")
-	b.WriteString("\x1b[4mActual\x1b[0m: \n")
-	b.WriteString(actual)
-	b.WriteString("\n\n")
-	b.WriteString("\x1b[4mDifference\x1b[0m: \n")
-	b.WriteString(diff.String(expect, actual))
-	b.WriteString("\n")
-	t.Fatal(b.String())
+	diff.TestString(t, expect, actual)
 }
 
 func matchEqual(t *testing.T, routes Routes) {
@@ -407,7 +386,7 @@ func matchEqual(t *testing.T, routes Routes) {
 	t.Helper()
 	tree := radix.New()
 	for _, route := range routes {
-		if err := tree.Insert(route.Route); err != nil {
+		if err := tree.Insert(route.Route, http.NotFoundHandler()); err != nil {
 			t.Fatal(err)
 		}
 		for _, request := range route.Requests {
@@ -478,8 +457,8 @@ func TestSampleMatch(t *testing.T) {
 func TestNonRoutableNoMatch(t *testing.T) {
 	is := is.New(t)
 	tree := radix.New()
-	is.NoErr(tree.Insert("/hello"))
-	is.NoErr(tree.Insert("/world"))
+	is.NoErr(tree.Insert("/hello", http.NotFoundHandler()))
+	is.NoErr(tree.Insert("/world", http.NotFoundHandler()))
 	match, err := tree.Match("/")
 	is.True(errors.Is(err, radix.ErrNoMatch))
 	is.Equal(match, nil)

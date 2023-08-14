@@ -2,6 +2,7 @@ package radix
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -21,33 +22,35 @@ type Tree struct {
 	root *Node
 }
 
-func (t *Tree) Insert(route string) error {
+func (t *Tree) Insert(route string, handler http.Handler) error {
 	r, err := parser.Parse(trimTrailingSlash(route))
 	if err != nil {
 		return err
 	}
 	// Expand optional and wildcard routes
 	for _, route := range r.Expand() {
-		if err := t.insert(route); err != nil {
+		if err := t.insert(route, handler); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (t *Tree) insert(route *ast.Route) error {
+func (t *Tree) insert(route *ast.Route, handler http.Handler) error {
 	if t.root == nil {
 		t.root = &Node{
 			Route:    route,
+			Handler:  handler,
 			sections: route.Sections,
 		}
 		return nil
 	}
-	return t.root.insert(route, route.Sections)
+	return t.root.insert(route, handler, route.Sections)
 }
 
 type Node struct {
 	Route    *ast.Route
+	Handler  http.Handler
 	sections ast.Sections
 	children Nodes
 }
@@ -75,7 +78,7 @@ func (n Nodes) Swap(i, j int) {
 	n[i], n[j] = n[j], n[i]
 }
 
-func (n *Node) insert(route *ast.Route, sections ast.Sections) error {
+func (n *Node) insert(route *ast.Route, handler http.Handler, sections ast.Sections) error {
 	lcp := n.sections.LongestCommonPrefix(sections)
 	if lcp < n.sections.Len() {
 		// Split the node's sections
@@ -83,6 +86,7 @@ func (n *Node) insert(route *ast.Route, sections ast.Sections) error {
 		// Create a new node with the parent's sections after the lcp.
 		splitChild := &Node{
 			Route:    n.Route,
+			Handler:  handler,
 			sections: parts[1],
 			children: n.children,
 		}
@@ -93,11 +97,13 @@ func (n *Node) insert(route *ast.Route, sections ast.Sections) error {
 		if lcp < sections.Len() {
 			newChild := &Node{
 				Route:    route,
+				Handler:  handler,
 				sections: sections.Split(lcp)[1],
 			}
 			// Replace the parent's sections with the lcp.
 			n.children = append(n.children, newChild)
 			n.Route = nil
+			n.Handler = nil
 		}
 		sort.Sort(n.children)
 		return nil
@@ -119,11 +125,12 @@ func (n *Node) insert(route *ast.Route, sections ast.Sections) error {
 	remainingSections := sections.Split(lcp)[1]
 	for _, child := range n.children {
 		if child.sections.At(0) == remainingSections.At(0) {
-			return child.insert(route, remainingSections)
+			return child.insert(route, handler, remainingSections)
 		}
 	}
 	n.children = append(n.children, &Node{
 		Route:    route,
+		Handler:  handler,
 		sections: remainingSections,
 	})
 	sort.Sort(n.children)
@@ -151,9 +158,10 @@ func createSlots(route *ast.Route, slotValues []string) (slots []*Slot) {
 }
 
 type Match struct {
-	Route *ast.Route
-	Path  string
-	Slots []*Slot
+	Route   *ast.Route
+	Path    string
+	Slots   []*Slot
+	Handler http.Handler
 }
 
 func (m *Match) String() string {
@@ -201,9 +209,10 @@ func (n *Node) Match(path string, slotValues []string) (*Match, bool) {
 			return nil, false
 		}
 		return &Match{
-			Route: n.Route,
-			Path:  path,
-			Slots: createSlots(n.Route, slotValues),
+			Route:   n.Route,
+			Handler: n.Handler,
+			Path:    path,
+			Slots:   createSlots(n.Route, slotValues),
 		}, true
 	}
 	for _, child := range n.children {
@@ -247,6 +256,7 @@ func longestCommonPrefix(a, b ast.Sections) int {
 	return index
 }
 
+// trimTrailingSlash strips any trailing slash (e.g. /users/ => /users)
 func trimTrailingSlash(input string) string {
 	if input == "/" {
 		return input
