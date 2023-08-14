@@ -1,4 +1,4 @@
-package router
+package mux
 
 import (
 	"errors"
@@ -92,9 +92,6 @@ func (rt *Router) Set(method string, route string, handler http.Handler) error {
 
 // Set the route
 func (rt *Router) set(method, route string, handler http.Handler) error {
-	if route == "/" {
-		return rt.insert(method, route, handler)
-	}
 	return rt.insert(method, route, handler)
 }
 

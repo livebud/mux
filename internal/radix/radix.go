@@ -86,7 +86,7 @@ func (n *Node) insert(route *ast.Route, handler http.Handler, sections ast.Secti
 		// Create a new node with the parent's sections after the lcp.
 		splitChild := &Node{
 			Route:    n.Route,
-			Handler:  handler,
+			Handler:  n.Handler,
 			sections: parts[1],
 			children: n.children,
 		}
