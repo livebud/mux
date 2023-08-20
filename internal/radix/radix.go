@@ -247,15 +247,6 @@ func (t *Tree) string(n *Node, indent string) string {
 	return out
 }
 
-func longestCommonPrefix(a, b ast.Sections) int {
-	index := 0
-	max := min(a.Len(), b.Len())
-	for i := 0; i < max && a.At(i) == b.At(i); i++ {
-		index++
-	}
-	return index
-}
-
 // trimTrailingSlash strips any trailing slash (e.g. /users/ => /users)
 func trimTrailingSlash(input string) string {
 	if input == "/" {

@@ -101,10 +101,6 @@ func (l *Lexer) step() {
 	l.next += width
 }
 
-func (l *Lexer) ignore() {
-	l.start = l.end
-}
-
 func (l *Lexer) text() string {
 	return l.input[l.start:l.end]
 }
@@ -134,15 +130,6 @@ func (l *Lexer) popState() {
 func (l *Lexer) errorf(msg string, args ...interface{}) token.Type {
 	l.err = fmt.Sprintf(msg, args...)
 	return token.Error
-}
-
-func (l *Lexer) unexpected() token.Type {
-	cp := l.cp
-	l.step()
-	if l.cp == eof {
-		return l.errorf("unexpected end of input")
-	}
-	return l.errorf("unexpected token '%s'", string(cp))
 }
 
 func initialState(l *Lexer) token.Type {

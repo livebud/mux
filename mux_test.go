@@ -12,27 +12,6 @@ import (
 	"github.com/matthewmueller/diff"
 )
 
-type test struct {
-	routes   []*route
-	requests []*request
-}
-
-type route struct {
-	method string
-	route  string
-	err    string
-}
-
-type request struct {
-	method string
-	path   string
-
-	// response
-	status   int
-	location string
-	body     string
-}
-
 // Handler returns the raw query
 func handler(route string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
