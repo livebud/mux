@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/livebud/mux/internal/ast"
+	"github.com/livebud/mux/ast"
 	"github.com/livebud/mux/internal/lexer"
 	"github.com/livebud/mux/internal/token"
 )

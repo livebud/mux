@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/livebud/mux/internal/ast"
+	"github.com/livebud/mux/ast"
 	"github.com/livebud/mux/internal/parser"
 )
 
