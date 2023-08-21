@@ -619,3 +619,39 @@ func TestSet(t *testing.T) {
 		HEAD /{id} id=10
 	`)
 }
+
+func TestResource(t *testing.T) {
+	router := mux.New()
+	router.Set(http.MethodGet, "/{id}/edit", handler("GET /{id}/edit"))
+	router.Set(http.MethodGet, "/", handler("GET /"))
+	router.Set(http.MethodGet, "/new", handler("GET /new"))
+	router.Set(http.MethodGet, "/{id}", handler("GET /{id}"))
+	requestEqual(t, router, "GET /", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /
+	`)
+	requestEqual(t, router, "GET /10", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /{id} id=10
+	`)
+	requestEqual(t, router, "GET /new", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /new
+	`)
+	requestEqual(t, router, "GET /10/edit", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /{id}/edit id=10
+	`)
+}

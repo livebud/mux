@@ -92,8 +92,7 @@ func (n *Node) insert(route *ast.Route, handler http.Handler, sections ast.Secti
 		}
 		n.sections = parts[0]
 		n.children = Nodes{splitChild}
-		n.Route = route
-		// Finally we can add the child
+		// Add a new child if we have more sections left.
 		if lcp < sections.Len() {
 			newChild := &Node{
 				Route:    route,
@@ -104,6 +103,11 @@ func (n *Node) insert(route *ast.Route, handler http.Handler, sections ast.Secti
 			n.children = append(n.children, newChild)
 			n.Route = nil
 			n.Handler = nil
+		} else {
+			// Otherwise this route matches the parent. Update the parent's route and
+			// handler.
+			n.Route = route
+			n.Handler = handler
 		}
 		sort.Sort(n.children)
 		return nil

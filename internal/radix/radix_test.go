@@ -383,7 +383,6 @@ func matchPath(t *testing.T, tree *radix.Tree, path string, expect string) {
 
 func matchEqual(t *testing.T, routes Routes) {
 	t.Helper()
-	t.Helper()
 	tree := radix.New()
 	for _, route := range routes {
 		if err := tree.Insert(route.Route, http.NotFoundHandler()); err != nil {
@@ -751,6 +750,25 @@ func TestMatchRegexp(t *testing.T) {
 			{"/v1.2", `/v{major|^[0-9]$}.{minor|^[0-9]$} major=1&minor=2`},
 			{"/v1", `/v{version} version=1`},
 			{"/valpha.beta.omega", `/v{version} version=alpha.beta.omega`},
+		}},
+	})
+}
+
+func TestResource(t *testing.T) {
+	tree := radix.New()
+	insertEqual(t, tree, "/{id}/edit", `
+		/{id}/edit [routable=/{id}/edit]
+	`)
+	insertEqual(t, tree, "/", `
+		/ [routable=/]
+		•{id}/edit [routable=/{id}/edit]
+	`)
+	matchEqual(t, Routes{
+		{"/{id}/edit", Requests{}},
+		{"/", Requests{
+			{"/", `/`},
+			{"/2/edit", `/{id}/edit id=2`},
+			{"/3/edit", `/{id}/edit id=3`},
 		}},
 	})
 }
