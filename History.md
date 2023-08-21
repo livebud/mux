@@ -1,3 +1,9 @@
+# 0.0.3 / 2023-08-20
+
+- fix edge case where wrong handler was getting called
+
+  If you added `/{id}/edit`, then added `/`, the parent handler would get the previous handler. So if you called `http.Get("/")`, it would trigger the edit handler.
+
 # 0.0.2 / 2023-08-20
 
 - expose the AST and add a top-level mux.Parse function
