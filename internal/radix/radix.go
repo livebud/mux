@@ -227,6 +227,38 @@ func (n *Node) Match(path string, slotValues []string) (*Match, bool) {
 	return nil, false
 }
 
+// Find by a route
+func (t *Tree) Find(route string) (*Node, error) {
+	r, err := parser.Parse(trimTrailingSlash(route))
+	if err != nil {
+		return nil, err
+	} else if t.root == nil {
+		return nil, fmt.Errorf("%w for %s", ErrNoMatch, route)
+	}
+	return t.root.find(route, r.Sections)
+}
+
+// Find by a route
+func (n *Node) find(route string, sections ast.Sections) (*Node, error) {
+	lcp := n.sections.LongestCommonPrefix(sections)
+	if lcp < n.sections.Len() {
+		return nil, fmt.Errorf("%w for %s", ErrNoMatch, route)
+	}
+	if lcp == sections.Len() {
+		if n.Route == nil {
+			return nil, fmt.Errorf("%w for %s", ErrNoMatch, route)
+		}
+		return n, nil
+	}
+	remainingSections := sections.Split(lcp)[1]
+	for _, child := range n.children {
+		if child.sections.At(0) == remainingSections.At(0) {
+			return child.find(route, remainingSections)
+		}
+	}
+	return nil, fmt.Errorf("%w for %s", ErrNoMatch, route)
+}
+
 func (t *Tree) String() string {
 	return t.string(t.root, "")
 }
@@ -249,6 +281,20 @@ func (t *Tree) string(n *Node, indent string) string {
 		out += t.string(child, indent)
 	}
 	return out
+}
+
+// Traverse the tree in depth-first order
+func (t *Tree) Each(fn func(n *Node) (next bool)) {
+	t.each(t.root, fn)
+}
+
+func (t *Tree) each(n *Node, fn func(n *Node) (next bool)) {
+	if !fn(n) {
+		return
+	}
+	for _, child := range n.children {
+		t.each(child, fn)
+	}
 }
 
 // trimTrailingSlash strips any trailing slash (e.g. /users/ => /users)

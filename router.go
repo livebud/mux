@@ -4,8 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 
 	"github.com/livebud/mux/internal/radix"
+)
+
+var (
+	ErrDuplicate = radix.ErrDuplicate
+	ErrNoMatch   = radix.ErrNoMatch
 )
 
 func New() *Router {
@@ -88,6 +94,64 @@ func (rt *Router) Set(method string, route string, handler http.Handler) error {
 		return fmt.Errorf("router: %q is not a valid HTTP method", method)
 	}
 	return rt.set(method, route, handler)
+}
+
+type Route struct {
+	Method  string
+	Route   string
+	Handler http.Handler
+}
+
+func (r *Route) String() string {
+	return fmt.Sprintf("%s %s", r.Method, r.Route)
+}
+
+func (rt *Router) Find(method, route string) (*Route, error) {
+	tree, ok := rt.methods[method]
+	if !ok {
+		return nil, fmt.Errorf("router: %w found for %s %s", ErrNoMatch, method, route)
+	}
+	node, err := tree.Find(route)
+	if err != nil {
+		return nil, err
+	}
+	return &Route{
+		Method:  method,
+		Route:   node.Route.String(),
+		Handler: node.Handler,
+	}, nil
+}
+
+// List all routes
+func (rt *Router) List() (routes []*Route) {
+	for method, tree := range rt.methods {
+		tree.Each(func(node *radix.Node) bool {
+			if node.Route == nil {
+				return true
+			}
+			routes = append(routes, &Route{
+				Method:  method,
+				Route:   node.Route.String(),
+				Handler: node.Handler,
+			})
+			return true
+		})
+	}
+	sort.Slice(routes, func(i, j int) bool {
+		if routes[i].Method != routes[j].Method {
+			return methodSort[routes[i].Method] < methodSort[routes[j].Method]
+		}
+		return routes[i].Route < routes[j].Route
+	})
+	return routes
+}
+
+var methodSort = map[string]int{
+	http.MethodGet:    0,
+	http.MethodPost:   1,
+	http.MethodPut:    2,
+	http.MethodPatch:  3,
+	http.MethodDelete: 4,
 }
 
 // Set the route

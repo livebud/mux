@@ -772,3 +772,23 @@ func TestResource(t *testing.T) {
 		}},
 	})
 }
+
+func TestFind(t *testing.T) {
+	is := is.New(t)
+	tree := radix.New()
+	a := http.NotFoundHandler()
+	b := http.NotFoundHandler()
+	is.NoErr(tree.Insert(`/{post_id}/comments`, a))
+	is.NoErr(tree.Insert(`/{post_id}.{format}`, b))
+	an, err := tree.Find(`/{post_id}/comments`)
+	is.NoErr(err)
+	is.Equal(an.Route.String(), `/{post_id}/comments`)
+	is.Equal(an.Handler, a)
+	bn, err := tree.Find(`/{post_id}.{format}`)
+	is.NoErr(err)
+	is.Equal(bn.Route.String(), `/{post_id}.{format}`)
+	is.Equal(bn.Handler, a)
+	cn, err := tree.Find(`/`)
+	is.True(errors.Is(err, radix.ErrNoMatch))
+	is.Equal(cn, nil)
+}

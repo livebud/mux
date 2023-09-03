@@ -1,6 +1,7 @@
 package mux_test
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/livebud/mux"
+	"github.com/matryer/is"
 	"github.com/matthewmueller/diff"
 )
 
@@ -654,4 +656,78 @@ func TestResource(t *testing.T) {
 
 		GET /{id}/edit id=10
 	`)
+}
+
+func TestFind(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	h := handler("GET /{id}")
+	err := router.Get("/{id}", h)
+	is.NoErr(err)
+	route, err := router.Find("GET", "/{id}")
+	is.NoErr(err)
+	is.Equal(route.Method, "GET")
+	is.Equal(route.Route, "/{id}")
+	is.Equal(route.Handler, h)
+	route, err = router.Find("POST", "/{id}")
+	is.True(errors.Is(err, mux.ErrNoMatch))
+	is.Equal(route, nil)
+}
+
+func TestDuplicateError(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	err := router.Get("/", handler("GET /"))
+	is.NoErr(err)
+	err = router.Get("/", handler("GET /"))
+	is.True(errors.Is(err, mux.ErrDuplicate))
+}
+
+func TestList(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	is.NoErr(router.Get("/", handler("GET /")))
+	is.NoErr(router.Get("/users", handler("GET /users")))
+	is.NoErr(router.Get("/users/new", handler("GET /users/new")))
+	is.NoErr(router.Post("/users", handler("POST /users")))
+	is.NoErr(router.Get("/users/{id}.{format?}", handler("GET /users/{id}.{format?}")))
+	is.NoErr(router.Get("/users/{id}/edit", handler("GET /users/{id}/edit")))
+	is.NoErr(router.Patch("/users/{id}.{format?}", handler("PATCH /users/{id}.{format?}")))
+	is.NoErr(router.Put("/users/{id}.{format?}", handler("PUT /users/{id}.{format?}")))
+	is.NoErr(router.Delete("/users/{id}.{format?}", handler("DELETE /users/{id}.{format?}")))
+	is.NoErr(router.Get("/posts/{post_id}/comments", handler("GET /posts/{post_id}/comments")))
+	is.NoErr(router.Get("/posts/{postid}/comments/new", handler("GET /posts/{postid}/comments/new")))
+	is.NoErr(router.Post("/posts/{post_id}/comments", handler("POST /posts/{post_id}/comments")))
+	is.NoErr(router.Get("/posts/{post_id}/comments/{id}.{format?}", handler("GET /posts/{post_id}/comments/{id}.{format?}")))
+	is.NoErr(router.Get("/posts/{post_id}/comments/{id}/edit", handler("GET /posts/{post_id}/comments/{id}/edit")))
+	is.NoErr(router.Patch("/posts/{post_id}/comments/{id}.{format?}", handler("PATCH /posts/{post_id}/comments/{id}.{format?}")))
+	is.NoErr(router.Put("/posts/{post_id}/comments/{id}.{format?}", handler("PUT /posts/{post_id}/comments/{id}.{format?}")))
+	is.NoErr(router.Delete("/posts/{post_id}/comments/{id}.{format?}", handler("DELETE /posts/{post_id}/comments/{id}.{format?}")))
+	routes := router.List()
+	is.Equal(len(routes), 25)
+	is.Equal(routes[0].String(), "GET /")
+	is.Equal(routes[1].String(), "GET /posts/{post_id}/comments")
+	is.Equal(routes[2].String(), "GET /posts/{post_id}/comments/{id}.")
+	is.Equal(routes[3].String(), "GET /posts/{post_id}/comments/{id}.{format}")
+	is.Equal(routes[4].String(), "GET /posts/{post_id}/comments/{id}/edit")
+	is.Equal(routes[5].String(), "GET /posts/{postid}/comments/new")
+	is.Equal(routes[6].String(), "GET /users")
+	is.Equal(routes[7].String(), "GET /users/new")
+	is.Equal(routes[8].String(), "GET /users/{id}.")
+	is.Equal(routes[9].String(), "GET /users/{id}.{format}")
+	is.Equal(routes[10].String(), "GET /users/{id}/edit")
+	is.Equal(routes[11].String(), "POST /posts/{post_id}/comments")
+	is.Equal(routes[12].String(), "POST /users")
+	is.Equal(routes[13].String(), "PUT /posts/{post_id}/comments/{id}.")
+	is.Equal(routes[14].String(), "PUT /posts/{post_id}/comments/{id}.{format}")
+	is.Equal(routes[15].String(), "PUT /users/{id}.")
+	is.Equal(routes[16].String(), "PUT /users/{id}.{format}")
+	is.Equal(routes[17].String(), "PATCH /posts/{post_id}/comments/{id}.")
+	is.Equal(routes[18].String(), "PATCH /posts/{post_id}/comments/{id}.{format}")
+	is.Equal(routes[19].String(), "PATCH /users/{id}.")
+	is.Equal(routes[20].String(), "PATCH /users/{id}.{format}")
+	is.Equal(routes[21].String(), "DELETE /posts/{post_id}/comments/{id}.")
+	is.Equal(routes[22].String(), "DELETE /posts/{post_id}/comments/{id}.{format}")
+	is.Equal(routes[23].String(), "DELETE /users/{id}.")
+	is.Equal(routes[24].String(), "DELETE /users/{id}.{format}")
 }
