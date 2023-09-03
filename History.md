@@ -1,3 +1,8 @@
+# 0.0.4 / 2023-09-04
+
+- add `-race` to makefile
+- add `.Find(route)` and `.List()` route methods
+
 # 0.0.3 / 2023-08-20
 
 - fix edge case where wrong handler was getting called
