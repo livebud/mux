@@ -116,6 +116,7 @@ func (n *Node) insert(route *ast.Route, handler http.Handler, sections ast.Secti
 	if lcp == sections.Len() {
 		if n.Route == nil {
 			n.Route = route
+			n.Handler = handler
 			return nil
 		}
 		oldRoute := n.Route.String()

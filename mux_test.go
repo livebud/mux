@@ -731,3 +731,21 @@ func TestList(t *testing.T) {
 	is.Equal(routes[23].String(), "DELETE /users/{id}.")
 	is.Equal(routes[24].String(), "DELETE /users/{id}.{format}")
 }
+
+func TestMissingRoot(t *testing.T) {
+	router := mux.New()
+	router.Get("/signup", handler("GET /signup"))
+	router.Post("/users", handler("POST /users"))
+	router.Get("/login", handler("GET /login"))
+	router.Post("/sessions", handler("POST /sessions"))
+	router.Delete("/sessions", handler("DELETE /sessions"))
+	router.Get("/", handler("GET /"))
+
+	requestEqual(t, router, "GET /", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /
+	`)
+}
