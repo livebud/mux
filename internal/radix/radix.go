@@ -193,6 +193,7 @@ func (t *Tree) Match(path string) (*Match, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w for %q", ErrNoMatch, path)
 	}
+	match.Path = path
 	return match, nil
 }
 
@@ -216,7 +217,6 @@ func (n *Node) Match(path string, slotValues []string) (*Match, bool) {
 		return &Match{
 			Route:   n.Route,
 			Handler: n.Handler,
-			Path:    path,
 			Slots:   createSlots(n.Route, slotValues),
 		}, true
 	}

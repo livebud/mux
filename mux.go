@@ -14,6 +14,8 @@ var (
 	ErrNoMatch   = radix.ErrNoMatch
 )
 
+type Match = radix.Match
+
 func New() *Router {
 	return &Router{
 		methods: map[string]*radix.Tree{},
@@ -144,6 +146,22 @@ func (rt *Router) List() (routes []*Route) {
 		return routes[i].Route < routes[j].Route
 	})
 	return routes
+}
+
+// Match a route from a method and path
+func (rt *Router) Match(method, path string) (*Match, error) {
+	tree, ok := rt.methods[method]
+	if !ok {
+		return nil, fmt.Errorf("router: %w found for %s %s", ErrNoMatch, method, path)
+	}
+	match, err := tree.Match(path)
+	if err != nil {
+		return nil, err
+	} else if match.Handler == nil {
+		// Internal route without a handler
+		return nil, fmt.Errorf("router: %w found for %s %s", ErrNoMatch, method, path)
+	}
+	return match, nil
 }
 
 var methodSort = map[string]int{

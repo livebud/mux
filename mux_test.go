@@ -749,3 +749,55 @@ func TestMissingRoot(t *testing.T) {
 		GET /
 	`)
 }
+
+func TestMatch(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	router.Get("/signup", handler("GET /signup"))
+	router.Post("/users", handler("POST /users"))
+	router.Get("/login", handler("GET /login"))
+	router.Post("/sessions", handler("POST /sessions"))
+	router.Delete("/sessions", handler("DELETE /sessions"))
+	router.Get("/users/{user_id}/posts/{id}", handler("GET /users/{user_id}/posts/{id}"))
+	router.Get("/", handler("GET /"))
+
+	match, err := router.Match(http.MethodGet, "/")
+	is.NoErr(err)
+	is.Equal(match.Route.String(), "/")
+	is.Equal(match.Path, "/")
+	is.Equal(len(match.Slots), 0)
+
+	match, err = router.Match(http.MethodPost, "/")
+	is.True(errors.Is(err, mux.ErrNoMatch))
+	is.Equal(match, nil)
+
+	match, err = router.Match(http.MethodGet, "/ok")
+	is.True(errors.Is(err, mux.ErrNoMatch))
+	is.Equal(match, nil)
+
+	match, err = router.Match(http.MethodPost, "/ok")
+	is.True(errors.Is(err, mux.ErrNoMatch))
+	is.Equal(match, nil)
+
+	match, err = router.Match(http.MethodPost, "/users")
+	is.NoErr(err)
+	is.Equal(match.Route.String(), "/users")
+	is.Equal(match.Path, "/users")
+	is.Equal(len(match.Slots), 0)
+
+	match, err = router.Match(http.MethodPost, "/users/")
+	is.NoErr(err)
+	is.Equal(match.Route.String(), "/users")
+	is.Equal(match.Path, "/users")
+	is.Equal(len(match.Slots), 0)
+
+	match, err = router.Match(http.MethodGet, "/users/10/posts/20")
+	is.NoErr(err)
+	is.Equal(match.Route.String(), "/users/{user_id}/posts/{id}")
+	is.Equal(match.Path, "/users/10/posts/20")
+	is.Equal(len(match.Slots), 2)
+	is.Equal(match.Slots[0].Key, "user_id")
+	is.Equal(match.Slots[0].Value, "10")
+	is.Equal(match.Slots[1].Key, "id")
+	is.Equal(match.Slots[1].Value, "20")
+}
