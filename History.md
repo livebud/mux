@@ -1,3 +1,7 @@
+# 0.0.5 / 2023-09-24
+
+- fix panic edge case
+
 # 0.0.4 / 2023-09-04
 
 - add `-race` to makefile
