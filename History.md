@@ -1,3 +1,7 @@
+# 0.0.6 / 2023-09-24
+
+- add .Match(method, path) method
+
 # 0.0.5 / 2023-09-24
 
 - fix panic edge case
