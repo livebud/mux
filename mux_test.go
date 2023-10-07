@@ -703,7 +703,7 @@ func TestList(t *testing.T) {
 	is.NoErr(router.Patch("/posts/{post_id}/comments/{id}.{format?}", handler("PATCH /posts/{post_id}/comments/{id}.{format?}")))
 	is.NoErr(router.Put("/posts/{post_id}/comments/{id}.{format?}", handler("PUT /posts/{post_id}/comments/{id}.{format?}")))
 	is.NoErr(router.Delete("/posts/{post_id}/comments/{id}.{format?}", handler("DELETE /posts/{post_id}/comments/{id}.{format?}")))
-	routes := router.List()
+	routes := router.Routes()
 	is.Equal(len(routes), 25)
 	is.Equal(routes[0].String(), "GET /")
 	is.Equal(routes[1].String(), "GET /posts/{post_id}/comments")

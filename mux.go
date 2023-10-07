@@ -124,8 +124,8 @@ func (rt *Router) Find(method, route string) (*Route, error) {
 	}, nil
 }
 
-// List all routes
-func (rt *Router) List() (routes []*Route) {
+// Routes lists all the routes
+func (rt *Router) Routes() (routes []*Route) {
 	for method, tree := range rt.methods {
 		tree.Each(func(node *radix.Node) bool {
 			if node.Route == nil {
