@@ -1,3 +1,7 @@
+# 0.0.7 / 2023-10-07
+
+- rename mux.List() to mux.Routes()
+
 # 0.0.6 / 2023-09-24
 
 - add .Match(method, path) method
