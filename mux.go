@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/livebud/mux/ast"
 	"github.com/livebud/mux/internal/radix"
 )
 
@@ -14,16 +15,28 @@ var (
 	ErrNoMatch   = radix.ErrNoMatch
 )
 
-type Match = radix.Match
+type Match struct {
+	Method  string
+	Route   *ast.Route
+	Path    string
+	Slots   []*radix.Slot
+	Handler http.Handler
+	Layout  *Partial
+	Error   *Partial
+}
 
 func New() *Router {
 	return &Router{
 		methods: map[string]*radix.Tree{},
+		layouts: radix.New(),
+		errors:  radix.New(),
 	}
 }
 
 type Router struct {
 	methods map[string]*radix.Tree
+	layouts *radix.Tree
+	errors  *radix.Tree
 }
 
 var _ http.Handler = (*Router)(nil)
@@ -51,6 +64,16 @@ func (rt *Router) Patch(route string, handler http.Handler) error {
 // Delete route
 func (rt *Router) Delete(route string, handler http.Handler) error {
 	return rt.set(http.MethodDelete, route, handler)
+}
+
+// Layout attaches a layout handler to a given route
+func (rt *Router) Layout(route string, handler http.Handler) error {
+	return rt.layouts.Insert(route, handler)
+}
+
+// Error attaches an error handler to a given route
+func (rt *Router) Error(route string, handler http.Handler) error {
+	return rt.errors.Insert(route, handler)
 }
 
 // ServeHTTP implements http.Handler
@@ -100,6 +123,13 @@ func (rt *Router) Set(method string, route string, handler http.Handler) error {
 
 type Route struct {
 	Method  string
+	Route   string
+	Handler http.Handler
+	Layout  *Partial
+	Error   *Partial
+}
+
+type Partial struct {
 	Route   string
 	Handler http.Handler
 }
@@ -154,12 +184,39 @@ func (rt *Router) Match(method, path string) (*Match, error) {
 	if !ok {
 		return nil, fmt.Errorf("router: %w found for %s %s", ErrNoMatch, method, path)
 	}
-	match, err := tree.Match(path)
+	m, err := tree.Match(path)
 	if err != nil {
 		return nil, err
-	} else if match.Handler == nil {
+	} else if m.Handler == nil {
 		// Internal route without a handler
 		return nil, fmt.Errorf("router: %w found for %s %s", ErrNoMatch, method, path)
+	}
+	match := &Match{
+		Method:  method,
+		Route:   m.Route,
+		Path:    m.Path,
+		Slots:   m.Slots,
+		Handler: m.Handler,
+	}
+	// Find the layout
+	if method == http.MethodGet {
+		if layout, err := rt.layouts.FindByPrefix(match.Route.String()); err != nil && !errors.Is(err, radix.ErrNoMatch) {
+			return nil, err
+		} else if layout != nil {
+			match.Layout = &Partial{
+				Route:   layout.Route.String(),
+				Handler: layout.Handler,
+			}
+		}
+		// Find the error
+		if error, err := rt.errors.FindByPrefix(match.Route.String()); err != nil && !errors.Is(err, radix.ErrNoMatch) {
+			return nil, err
+		} else if error != nil {
+			match.Error = &Partial{
+				Route:   error.Route.String(),
+				Handler: error.Handler,
+			}
+		}
 	}
 	return match, nil
 }

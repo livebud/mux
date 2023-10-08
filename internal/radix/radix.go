@@ -260,6 +260,42 @@ func (n *Node) find(route string, sections ast.Sections) (*Node, error) {
 	return nil, fmt.Errorf("%w for %s", ErrNoMatch, route)
 }
 
+func (t *Tree) FindByPrefix(prefix string) (*Node, error) {
+	route, err := parser.Parse(trimTrailingSlash(prefix))
+	if err != nil {
+		return nil, err
+	} else if t.root == nil {
+		return nil, fmt.Errorf("%w for %s", ErrNoMatch, route)
+	}
+	return t.root.findByPrefix(prefix, route.Sections)
+}
+
+func (n *Node) findByPrefix(prefix string, sections ast.Sections) (*Node, error) {
+	if n.sections.Len() > sections.Len() {
+		return nil, fmt.Errorf("%w for %s", ErrNoMatch, prefix)
+	}
+	lcp := n.sections.LongestCommonPrefix(sections)
+	if lcp == 0 {
+		return nil, fmt.Errorf("%w for %s", ErrNoMatch, sections)
+	}
+	if lcp == sections.Len() {
+		if n.Route == nil {
+			return nil, fmt.Errorf("%w for %s", ErrNoMatch, prefix)
+		}
+		return n, nil
+	}
+	remainingSections := sections.Split(lcp)[1]
+	for _, child := range n.children {
+		if child.sections.At(0) == remainingSections.At(0) && child.sections.Len() <= remainingSections.Len() {
+			return child.findByPrefix(prefix, remainingSections)
+		}
+	}
+	if lcp < n.sections.Len() {
+		return nil, fmt.Errorf("%w for %s", ErrNoMatch, prefix)
+	}
+	return n, nil
+}
+
 func (t *Tree) String() string {
 	return t.string(t.root, "")
 }
