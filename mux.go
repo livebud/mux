@@ -21,8 +21,8 @@ type Match struct {
 	Path    string
 	Slots   []*radix.Slot
 	Handler http.Handler
-	Layout  *Partial
-	Error   *Partial
+	Layout  *LayoutHandler
+	Error   *ErrorHandler
 }
 
 func New() *Router {
@@ -85,13 +85,8 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Middleware will return next on no match
 func (rt *Router) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tree, ok := rt.methods[r.Method]
-		if !ok {
-			next.ServeHTTP(w, r)
-			return
-		}
 		// Match the path
-		match, err := tree.Match(r.URL.Path)
+		match, err := rt.Match(r.Method, r.URL.Path)
 		if err != nil {
 			if errors.Is(err, radix.ErrNoMatch) {
 				next.ServeHTTP(w, r)
@@ -125,11 +120,16 @@ type Route struct {
 	Method  string
 	Route   string
 	Handler http.Handler
-	Layout  *Partial
-	Error   *Partial
+	Layout  *LayoutHandler
+	Error   *ErrorHandler
 }
 
-type Partial struct {
+type LayoutHandler struct {
+	Route   string
+	Handler http.Handler
+}
+
+type ErrorHandler struct {
 	Route   string
 	Handler http.Handler
 }
@@ -147,11 +147,22 @@ func (rt *Router) Find(method, route string) (*Route, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Route{
+	r := &Route{
 		Method:  method,
 		Route:   node.Route.String(),
 		Handler: node.Handler,
-	}, nil
+	}
+	// Find the layout handler
+	r.Layout, err = rt.findLayout(method, node.Route.String())
+	if err != nil {
+		return nil, err
+	}
+	// Find the error handler
+	r.Error, err = rt.findError(method, node.Route.String())
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 // Routes lists all the routes
@@ -198,27 +209,53 @@ func (rt *Router) Match(method, path string) (*Match, error) {
 		Slots:   m.Slots,
 		Handler: m.Handler,
 	}
-	// Find the layout
-	if method == http.MethodGet {
-		if layout, err := rt.layouts.FindByPrefix(match.Route.String()); err != nil && !errors.Is(err, radix.ErrNoMatch) {
-			return nil, err
-		} else if layout != nil {
-			match.Layout = &Partial{
-				Route:   layout.Route.String(),
-				Handler: layout.Handler,
-			}
-		}
-		// Find the error
-		if error, err := rt.errors.FindByPrefix(match.Route.String()); err != nil && !errors.Is(err, radix.ErrNoMatch) {
-			return nil, err
-		} else if error != nil {
-			match.Error = &Partial{
-				Route:   error.Route.String(),
-				Handler: error.Handler,
-			}
-		}
+	// Find the layout handler
+	match.Layout, err = rt.findLayout(method, m.Route.String())
+	if err != nil {
+		return nil, err
+	}
+	// Find the error handler
+	match.Error, err = rt.findError(method, m.Route.String())
+	if err != nil {
+		return nil, err
 	}
 	return match, nil
+}
+
+// FindLayout finds the layout for a given path
+func (rt *Router) findLayout(method, route string) (*LayoutHandler, error) {
+	if method != http.MethodGet {
+		return nil, nil
+	}
+	layout, err := rt.layouts.FindByPrefix(route)
+	if err != nil {
+		if !errors.Is(err, ErrNoMatch) {
+			return nil, err
+		}
+		return nil, nil
+	}
+	return &LayoutHandler{
+		Route:   layout.Route.String(),
+		Handler: layout.Handler,
+	}, nil
+}
+
+// Find the error handler
+func (rt *Router) findError(method, route string) (*ErrorHandler, error) {
+	if method != http.MethodGet {
+		return nil, nil
+	}
+	errorHandler, err := rt.errors.FindByPrefix(route)
+	if err != nil {
+		if !errors.Is(err, ErrNoMatch) {
+			return nil, err
+		}
+		return nil, nil
+	}
+	return &ErrorHandler{
+		Route:   errorHandler.Route.String(),
+		Handler: errorHandler.Handler,
+	}, nil
 }
 
 var methodSort = map[string]int{

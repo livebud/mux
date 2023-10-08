@@ -831,6 +831,17 @@ func TestLayout(t *testing.T) {
 	is.Equal(match.Layout.Handler, layout)
 	is.True(match.Error == nil)
 
+	// Find /
+	route, err := router.Find(http.MethodGet, "/")
+	is.NoErr(err)
+	is.Equal(route.Method, http.MethodGet)
+	is.Equal(route.Route, "/")
+	is.Equal(route.Handler, root)
+	is.True(route.Layout != nil)
+	is.Equal(route.Layout.Route, "/")
+	is.Equal(route.Layout.Handler, layout)
+	is.True(route.Error == nil)
+
 	// Match /signup
 	match, err = router.Match(http.MethodGet, "/signup")
 	is.NoErr(err)
@@ -844,6 +855,17 @@ func TestLayout(t *testing.T) {
 	is.Equal(match.Layout.Handler, layout)
 	is.True(match.Error == nil)
 
+	// Find /
+	route, err = router.Find(http.MethodGet, "/signup")
+	is.NoErr(err)
+	is.Equal(route.Method, http.MethodGet)
+	is.Equal(route.Route, "/signup")
+	is.Equal(route.Handler, signup)
+	is.True(route.Layout != nil)
+	is.Equal(route.Layout.Route, "/")
+	is.Equal(route.Layout.Handler, layout)
+	is.True(route.Error == nil)
+
 	// Match POST /users
 	match, err = router.Match(http.MethodPost, "/users")
 	is.NoErr(err)
@@ -854,6 +876,15 @@ func TestLayout(t *testing.T) {
 	is.Equal(match.Handler, createUsers)
 	is.True(match.Layout == nil)
 	is.True(match.Error == nil)
+
+	// Find /
+	route, err = router.Find(http.MethodPost, "/users")
+	is.NoErr(err)
+	is.Equal(route.Method, http.MethodPost)
+	is.Equal(route.Route, "/users")
+	is.Equal(route.Handler, createUsers)
+	is.True(route.Layout == nil)
+	is.True(route.Error == nil)
 
 	// Match GET /users
 	match, err = router.Match(http.MethodGet, "/users")
@@ -867,6 +898,17 @@ func TestLayout(t *testing.T) {
 	is.Equal(match.Layout.Route, "/users")
 	is.Equal(match.Layout.Handler, userLayout)
 	is.True(match.Error == nil)
+
+	// Find GET /users
+	route, err = router.Find(http.MethodGet, "/users")
+	is.NoErr(err)
+	is.Equal(route.Method, http.MethodGet)
+	is.Equal(route.Route, "/users")
+	is.Equal(route.Handler, listUsers)
+	is.True(route.Layout != nil)
+	is.Equal(route.Layout.Route, "/users")
+	is.Equal(route.Layout.Handler, userLayout)
+	is.True(route.Error == nil)
 }
 
 func TestError(t *testing.T) {
@@ -898,6 +940,17 @@ func TestError(t *testing.T) {
 	is.Equal(match.Error.Route, "/")
 	is.Equal(match.Error.Handler, errorHandler)
 
+	// Find /
+	route, err := router.Find(http.MethodGet, "/")
+	is.NoErr(err)
+	is.Equal(route.Method, http.MethodGet)
+	is.Equal(route.Route, "/")
+	is.Equal(route.Handler, root)
+	is.True(route.Layout == nil)
+	is.True(route.Error != nil)
+	is.Equal(route.Error.Route, "/")
+	is.Equal(route.Error.Handler, errorHandler)
+
 	// Match /signup
 	match, err = router.Match(http.MethodGet, "/signup")
 	is.NoErr(err)
@@ -911,6 +964,17 @@ func TestError(t *testing.T) {
 	is.Equal(match.Error.Route, "/")
 	is.Equal(match.Error.Handler, errorHandler)
 
+	// Find /signup
+	route, err = router.Find(http.MethodGet, "/signup")
+	is.NoErr(err)
+	is.Equal(route.Method, http.MethodGet)
+	is.Equal(route.Route, "/signup")
+	is.Equal(route.Handler, signup)
+	is.True(route.Layout == nil)
+	is.True(route.Error != nil)
+	is.Equal(route.Error.Route, "/")
+	is.Equal(route.Error.Handler, errorHandler)
+
 	// Match POST /users
 	match, err = router.Match(http.MethodPost, "/users")
 	is.NoErr(err)
@@ -921,6 +985,15 @@ func TestError(t *testing.T) {
 	is.Equal(match.Handler, createUsers)
 	is.True(match.Layout == nil)
 	is.True(match.Error == nil)
+
+	// Find POST /users
+	route, err = router.Find(http.MethodPost, "/users")
+	is.NoErr(err)
+	is.Equal(route.Method, http.MethodPost)
+	is.Equal(route.Route, "/users")
+	is.Equal(route.Handler, createUsers)
+	is.True(route.Layout == nil)
+	is.True(route.Error == nil)
 
 	// Match GET /users
 	match, err = router.Match(http.MethodGet, "/users")
@@ -934,4 +1007,14 @@ func TestError(t *testing.T) {
 	is.True(match.Error != nil)
 	is.Equal(match.Error.Route, "/users")
 	is.Equal(match.Error.Handler, userErrorHandler)
+
+	route, err = router.Find(http.MethodGet, "/users")
+	is.NoErr(err)
+	is.Equal(route.Method, http.MethodGet)
+	is.Equal(route.Route, "/users")
+	is.Equal(route.Handler, listUsers)
+	is.True(route.Layout == nil)
+	is.True(route.Error != nil)
+	is.Equal(route.Error.Route, "/users")
+	is.Equal(route.Error.Handler, userErrorHandler)
 }
