@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/livebud/mux/ast"
+	"github.com/livebud/mux/internal/chain"
 	"github.com/livebud/mux/internal/radix"
 )
 
@@ -103,8 +104,15 @@ func (rt *Router) Middleware(next http.Handler) http.Handler {
 			}
 			r.URL.RawQuery = query.Encode()
 		}
+		// Chain the handlers together
+		var handlers []http.Handler
+		handlers = append(handlers, match.Handler)
+		if match.Layout != nil {
+			handlers = append(handlers, match.Layout.Handler)
+		}
+		handler := chain.All(handlers...)
 		// Call the handler
-		match.Handler.ServeHTTP(w, r)
+		handler.ServeHTTP(w, r)
 	})
 }
 

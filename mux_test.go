@@ -1,6 +1,7 @@
 package mux_test
 
 import (
+	"bytes"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -1017,4 +1018,42 @@ func TestError(t *testing.T) {
 	is.True(route.Error != nil)
 	is.Equal(route.Error.Route, "/users")
 	is.Equal(route.Error.Handler, userErrorHandler)
+}
+
+func TestLayoutRequest(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	router.Layout("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b := new(bytes.Buffer)
+		b.WriteString("<layout>")
+		n, err := b.ReadFrom(r.Body)
+		is.NoErr(err)
+		is.True(n > 0)
+		b.WriteString("</layout>")
+		w.Write(b.Bytes())
+	}))
+	router.Get("/posts/{post_id}/comments", handler("GET /posts/{post_id}/comments"))
+	router.Post("/posts/{post_id}/comments", handler("POST /posts/{post_id}/comments"))
+	requestEqual(t, router, "GET /posts/10/comments", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		<layout>GET /posts/{post_id}/comments post_id=10</layout>
+	`)
+	requestEqual(t, router, "POST /posts/10/comments", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		POST /posts/{post_id}/comments post_id=10
+	`)
+	requestEqual(t, router, "GET /", `
+		HTTP/1.1 404 Not Found
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+		X-Content-Type-Options: nosniff
+
+		404 page not found
+	`)
 }
