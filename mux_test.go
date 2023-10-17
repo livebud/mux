@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/livebud/mux"
+	"github.com/livebud/slot"
 	"github.com/matryer/is"
 	"github.com/matthewmueller/diff"
 )
@@ -1026,9 +1027,10 @@ func TestLayoutRequest(t *testing.T) {
 	router.Layout("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b := new(bytes.Buffer)
 		b.WriteString("<layout>")
-		n, err := b.ReadFrom(r.Body)
+		slots := slot.Open(w, r)
+		slot, err := slots.ReadString()
 		is.NoErr(err)
-		is.True(n > 0)
+		b.WriteString(slot)
 		b.WriteString("</layout>")
 		w.Write(b.Bytes())
 	}))
