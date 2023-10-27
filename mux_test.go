@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/livebud/middleware"
 	"github.com/livebud/mux"
 	"github.com/livebud/slot"
 	"github.com/matryer/is"
@@ -1057,5 +1058,26 @@ func TestLayoutRequest(t *testing.T) {
 		X-Content-Type-Options: nosniff
 
 		404 page not found
+	`)
+}
+
+func TestMiddleware(t *testing.T) {
+	router := mux.New()
+	router.Use(middleware.Func(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-A", "A")
+			next.ServeHTTP(w, r)
+			// Note: Can't use a header here because we've already written
+			w.Write([]byte("(after)"))
+		})
+	}))
+	router.Get("/", handler("GET /"))
+	requestEqual(t, router, "GET /", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+		X-A: A
+
+		GET / (after)
 	`)
 }

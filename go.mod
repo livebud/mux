@@ -3,6 +3,7 @@ module github.com/livebud/mux
 go 1.21.0
 
 require (
+	github.com/livebud/middleware v0.0.1
 	github.com/livebud/slot v0.0.1
 	github.com/matryer/is v1.4.1
 	github.com/matthewmueller/diff v0.0.0-20220110044814-1b370be97fd0

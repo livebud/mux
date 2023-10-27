@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/livebud/middleware"
 	"github.com/livebud/mux/ast"
 	"github.com/livebud/mux/internal/radix"
 	"github.com/livebud/slot"
@@ -52,13 +53,20 @@ func New() *router {
 
 type router struct {
 	base    string
+	stack   []middleware.Middleware
 	methods map[string]*radix.Tree
 	layouts *radix.Tree
 	errors  *radix.Tree
 }
 
 var _ http.Handler = (*router)(nil)
+var _ middleware.Middleware = (*router)(nil)
 var _ Router = (*router)(nil)
+
+// Use appends middleware to the bottom of the stack
+func (rt *router) Use(middleware middleware.Middleware) {
+	rt.stack = append(rt.stack, middleware)
+}
 
 // Get route
 func (rt *router) Get(route string, handler http.Handler) error {
@@ -123,6 +131,7 @@ func (rt *router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Middleware will return next on no match
 func (rt *router) Middleware(next http.Handler) http.Handler {
+	stack := middleware.Compose(rt.stack...)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Match the path
 		match, err := rt.Match(r.Method, r.URL.Path)
@@ -150,6 +159,8 @@ func (rt *router) Middleware(next http.Handler) http.Handler {
 		}
 		// Batch the handlers together
 		handler := slot.Batch(handlers...)
+		// Add the middleware
+		handler = stack.Middleware(handler)
 		// Call the handler
 		handler.ServeHTTP(w, r)
 	})
