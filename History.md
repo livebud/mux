@@ -1,3 +1,9 @@
+# 0.0.8 / 2023-10-27
+
+- add middleware support
+- add batch support
+- add layouts and errors
+
 # 0.0.7 / 2023-10-07
 
 - rename mux.List() to mux.Routes()
