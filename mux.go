@@ -132,7 +132,7 @@ func (rt *router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Middleware will return next on no match
 func (rt *router) Middleware(next http.Handler) http.Handler {
 	stack := middleware.Compose(rt.stack...)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return stack.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Match the path
 		match, err := rt.Match(r.Method, r.URL.Path)
 		if err != nil {
@@ -159,11 +159,9 @@ func (rt *router) Middleware(next http.Handler) http.Handler {
 		}
 		// Batch the handlers together
 		handler := slot.Batch(handlers...)
-		// Add the middleware
-		handler = stack.Middleware(handler)
 		// Call the handler
 		handler.ServeHTTP(w, r)
-	})
+	}))
 }
 
 // Set a handler manually

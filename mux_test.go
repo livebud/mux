@@ -1081,3 +1081,23 @@ func TestMiddleware(t *testing.T) {
 		GET / (after)
 	`)
 }
+
+func TestMiddlewareWrapsNonMatches(t *testing.T) {
+	router := mux.New()
+	router.Use(middleware.Func(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-A", "A")
+			next.ServeHTTP(w, r)
+		})
+	}))
+	router.Get("/", handler("GET /"))
+	requestEqual(t, router, "POST /", `
+		HTTP/1.1 404 Not Found
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+		X-A: A
+		X-Content-Type-Options: nosniff
+
+		404 page not found
+	`)
+}
