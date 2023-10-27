@@ -1,3 +1,7 @@
+# 0.0.9 / 2023-10-27
+
+- middleware should also run on non-matching routes
+
 # 0.0.8 / 2023-10-27
 
 - add middleware support
