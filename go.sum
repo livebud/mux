@@ -11,6 +11,8 @@ github.com/livebud/middleware v0.0.1 h1:KSk9bNHz3AiHyWMComFzaFyJh5LX6eNKkXflPVLX
 github.com/livebud/middleware v0.0.1/go.mod h1:K2WnJTicxKGNTfWl6Cun95y2T840sGuj1W7eANvJC08=
 github.com/livebud/slot v0.0.1 h1:qbpHJeb2wGtqE+8FHbQrsxT3Vk3EZn2tNTTk5Uz7z2c=
 github.com/livebud/slot v0.0.1/go.mod h1:C2E8iaruXEmxSpKaKnJnJLl8EUgcZmwlDRQdWtTSWAE=
+github.com/livebud/slot v0.0.2 h1:+A6JPVNNnVl3Yso7mgnKt+6vomzx/n8KwOytRbLAnEs=
+github.com/livebud/slot v0.0.2/go.mod h1:C2E8iaruXEmxSpKaKnJnJLl8EUgcZmwlDRQdWtTSWAE=
 github.com/matryer/is v1.4.0/go.mod h1:8I/i5uYgLzgsgEloJE1U6xx5HkBQpAZvepWuujKwMRU=
 github.com/matryer/is v1.4.1 h1:55ehd8zaGABKLXQUe2awZ99BD/PTc2ls+KV/dXphgEQ=
 github.com/matryer/is v1.4.1/go.mod h1:8I/i5uYgLzgsgEloJE1U6xx5HkBQpAZvepWuujKwMRU=

@@ -103,14 +103,14 @@ func (rt *router) Error(route string, handler http.Handler) error {
 	return rt.errors.Insert(route, handler)
 }
 
-// Routable is an interface for adding routes
-type Routable interface {
+// Routing is an interface for adding routes
+type Routing interface {
 	Routes(rt Router)
 }
 
-// Add routes from routables
-func (rt *router) Add(routable Routable) {
-	routable.Routes(rt)
+// Add routing
+func (rt *router) Add(routing Routing) {
+	routing.Routes(rt)
 }
 
 // Group routes within a route

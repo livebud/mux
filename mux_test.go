@@ -3,6 +3,7 @@ package mux_test
 import (
 	"bytes"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -1100,4 +1101,20 @@ func TestMiddlewareWrapsNonMatches(t *testing.T) {
 
 		404 page not found
 	`)
+}
+
+func TestPostBody(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	router.Post("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		is.NoErr(err)
+		w.Write(body)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"jon"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	is.Equal(rec.Code, http.StatusOK)
+	is.Equal(rec.Body.String(), `{"name":"jon"}`)
 }
