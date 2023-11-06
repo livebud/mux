@@ -19,10 +19,30 @@ import (
 )
 
 // Handler returns the raw query
-func handler(route string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(route + " " + r.URL.RawQuery))
-	})
+func handler(route string) *handlerFunc {
+	return &handlerFunc{
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(route + " " + r.URL.RawQuery))
+		},
+		http.Header{},
+	}
+}
+
+type handlerFunc struct {
+	fn      func(w http.ResponseWriter, r *http.Request)
+	headers http.Header
+}
+
+func (h *handlerFunc) Set(name, value string) *handlerFunc {
+	h.headers.Set(name, value)
+	return h
+}
+
+func (h *handlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	for key := range h.headers {
+		w.Header().Set(key, h.headers.Get(key))
+	}
+	h.fn(w, r)
 }
 
 func requestEqual(t testing.TB, router http.Handler, request string, expect string) {
@@ -1059,6 +1079,26 @@ func TestLayoutRequest(t *testing.T) {
 		X-Content-Type-Options: nosniff
 
 		404 page not found
+	`)
+}
+
+func TestLayoutNonHTMLRequest(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	router.Layout("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		inner, err := io.ReadAll(r.Body)
+		is.NoErr(err)
+		w.Write([]byte("<layout>"))
+		w.Write(inner)
+		w.Write([]byte("</layout>"))
+	}))
+	router.Get("/posts/{post_id}/comments.js", handler("console.log('hi')").Set("Content-Type", "application/javascript"))
+	requestEqual(t, router, "GET /posts/10/comments.js", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: application/javascript
+
+		console.log('hi') post_id=10
 	`)
 }
 

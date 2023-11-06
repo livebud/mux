@@ -42,12 +42,21 @@ type Match struct {
 	Error   *ErrorHandler
 }
 
-func New() *router {
+// WithBatch provides a custom batching function for mux. This is useful when a
+// route has layout and frame handlers.
+func WithBatch(batch func(...http.Handler) http.Handler) func(*router) {
+	return func(rt *router) {
+		rt.batch = batch
+	}
+}
+
+func New(options ...func(*router)) *router {
 	return &router{
 		base:    "",
 		methods: map[string]*radix.Tree{},
 		layouts: radix.New(),
 		errors:  radix.New(),
+		batch:   slot.Batch,
 	}
 }
 
@@ -57,6 +66,7 @@ type router struct {
 	methods map[string]*radix.Tree
 	layouts *radix.Tree
 	errors  *radix.Tree
+	batch   func(...http.Handler) http.Handler
 }
 
 var _ http.Handler = (*router)(nil)
@@ -103,14 +113,14 @@ func (rt *router) Error(route string, handler http.Handler) error {
 	return rt.errors.Insert(route, handler)
 }
 
-// Routing is an interface for adding routes
-type Routing interface {
+// Routes is an interface for adding routes
+type Routes interface {
 	Routes(rt Router)
 }
 
-// Add routing
-func (rt *router) Add(routing Routing) {
-	routing.Routes(rt)
+// Add routes
+func (rt *router) Add(routes Routes) {
+	routes.Routes(rt)
 }
 
 // Group routes within a route
@@ -151,6 +161,11 @@ func (rt *router) Middleware(next http.Handler) http.Handler {
 			}
 			r.URL.RawQuery = query.Encode()
 		}
+		// Avoid calling other handlers if there's a path extension
+		if path.Ext(r.URL.Path) != "" {
+			match.Handler.ServeHTTP(w, r)
+			return
+		}
 		// Chain the handlers together
 		var handlers []http.Handler
 		handlers = append(handlers, match.Handler)
@@ -158,7 +173,7 @@ func (rt *router) Middleware(next http.Handler) http.Handler {
 			handlers = append(handlers, match.Layout.Handler)
 		}
 		// Batch the handlers together
-		handler := slot.Batch(handlers...)
+		handler := rt.batch(handlers...)
 		// Call the handler
 		handler.ServeHTTP(w, r)
 	}))
