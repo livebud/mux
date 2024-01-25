@@ -1,3 +1,8 @@
+# 0.0.10 / 2024-01-24
+
+- don't apply slots when there are extensions
+- fix reading from request body
+
 # 0.0.9 / 2023-10-27
 
 - middleware should also run on non-matching routes
