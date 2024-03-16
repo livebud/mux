@@ -1,3 +1,8 @@
+# 0.1.1 / 2024-03-16
+
+- switch to using functions
+- add middleware stack support back in
+
 # 0.1.0 / 2024-03-16
 
 - run go mod tidy and rename history to changelog
