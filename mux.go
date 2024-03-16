@@ -16,12 +16,15 @@ var (
 	ErrNoMatch   = enroute.ErrNoMatch
 )
 
+type Middleware = func(next http.Handler) http.Handler
+
 type Interface interface {
-	Get(route string, handler http.Handler) error
-	Post(route string, handler http.Handler) error
-	Put(route string, handler http.Handler) error
-	Patch(route string, handler http.Handler) error
-	Delete(route string, handler http.Handler) error
+	Use(fn Middleware)
+	Get(route string, fn http.HandlerFunc) error
+	Post(route string, fn http.HandlerFunc) error
+	Put(route string, fn http.HandlerFunc) error
+	Patch(route string, fn http.HandlerFunc) error
+	Delete(route string, fn http.HandlerFunc) error
 	Set(method, route string, handler http.Handler) error
 }
 
@@ -42,41 +45,60 @@ func New() *Router {
 
 type Router struct {
 	base    string
+	stack   []Middleware
 	methods map[string]*tree
 }
 
 var _ http.Handler = (*Router)(nil)
 var _ Interface = (*Router)(nil)
 
+func (rt *Router) Use(fn Middleware) {
+	rt.stack = append(rt.stack, fn)
+}
+
 // Get route
-func (rt *Router) Get(route string, handler http.Handler) error {
+func (rt *Router) Get(route string, handler http.HandlerFunc) error {
 	return rt.set(http.MethodGet, route, handler)
 }
 
 // Post route
-func (rt *Router) Post(route string, handler http.Handler) error {
+func (rt *Router) Post(route string, handler http.HandlerFunc) error {
 	return rt.set(http.MethodPost, route, handler)
 }
 
 // Put route
-func (rt *Router) Put(route string, handler http.Handler) error {
+func (rt *Router) Put(route string, handler http.HandlerFunc) error {
 	return rt.set(http.MethodPut, route, handler)
 }
 
 // Patch route
-func (rt *Router) Patch(route string, handler http.Handler) error {
+func (rt *Router) Patch(route string, handler http.HandlerFunc) error {
 	return rt.set(http.MethodPatch, route, handler)
 }
 
 // Delete route
-func (rt *Router) Delete(route string, handler http.Handler) error {
+func (rt *Router) Delete(route string, handler http.HandlerFunc) error {
 	return rt.set(http.MethodDelete, route, handler)
+}
+
+// Set a handler manually
+func (rt *Router) Set(method string, route string, handler http.Handler) error {
+	if !isMethod(method) {
+		return fmt.Errorf("router: %q is not a valid HTTP method", method)
+	}
+	return rt.set(method, route, handler)
+}
+
+// Set the route
+func (rt *Router) set(method, route string, handler http.Handler) error {
+	return rt.insert(method, path.Join(rt.base, route), handler)
 }
 
 // Group routes within a route
 func (rt *Router) Group(route string) *Router {
 	return &Router{
 		base:    strings.TrimSuffix(path.Join(rt.base, route), "/"),
+		stack:   rt.stack,
 		methods: rt.methods,
 	}
 }
@@ -87,9 +109,11 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler.ServeHTTP(w, r)
 }
 
-// Middleware will return next on no match
+// Middleware turns the router into middleware where if there are no matches
+// it will call the next middleware in the stack
 func (rt *Router) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	middleware := compose(rt.stack)
+	return middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Match the path
 		match, err := rt.Match(r.Method, r.URL.Path)
 		if err != nil {
@@ -109,15 +133,7 @@ func (rt *Router) Middleware(next http.Handler) http.Handler {
 			r.URL.RawQuery = query.Encode()
 		}
 		match.Handler.ServeHTTP(w, r)
-	})
-}
-
-// Set a handler manually
-func (rt *Router) Set(method string, route string, handler http.Handler) error {
-	if !isMethod(method) {
-		return fmt.Errorf("router: %q is not a valid HTTP method", method)
-	}
-	return rt.set(method, route, handler)
+	}))
 }
 
 type Route struct {
@@ -169,11 +185,6 @@ func (rt *Router) Match(method, path string) (*Match, error) {
 	return tree.Match(method, path)
 }
 
-// Set the route
-func (rt *Router) set(method, route string, handler http.Handler) error {
-	return rt.insert(method, path.Join(rt.base, route), handler)
-}
-
 // Insert the route into the method's radix tree
 func (rt *Router) insert(method, route string, handler http.Handler) error {
 	tr := rt.methods[method]
@@ -196,5 +207,18 @@ func isMethod(method string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// Compose a stack of middleware
+func compose(stack []Middleware) Middleware {
+	return func(next http.Handler) http.Handler {
+		if len(stack) == 0 {
+			return next
+		}
+		for i := len(stack) - 1; i >= 0; i-- {
+			next = stack[i](next)
+		}
+		return next
 	}
 }

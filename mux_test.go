@@ -17,30 +17,10 @@ import (
 )
 
 // Handler returns the raw query
-func handler(route string) *handlerFunc {
-	return &handlerFunc{
-		func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(route + " " + r.URL.RawQuery))
-		},
-		http.Header{},
+func handler(route string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(route + " " + r.URL.RawQuery))
 	}
-}
-
-type handlerFunc struct {
-	fn      func(w http.ResponseWriter, r *http.Request)
-	headers http.Header
-}
-
-func (h *handlerFunc) Set(name, value string) *handlerFunc {
-	h.headers.Set(name, value)
-	return h
-}
-
-func (h *handlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	for key := range h.headers {
-		w.Header().Set(key, h.headers.Get(key))
-	}
-	h.fn(w, r)
 }
 
 func requestEqual(t testing.TB, router http.Handler, request string, expect string) {
@@ -829,6 +809,47 @@ func TestMatch(t *testing.T) {
 	is.Equal(match.Slots[0].Value, "10")
 	is.Equal(match.Slots[1].Key, "id")
 	is.Equal(match.Slots[1].Value, "20")
+}
+
+func TestMiddleware(t *testing.T) {
+	router := mux.New()
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-A", "A")
+			next.ServeHTTP(w, r)
+			// Note: Can't use a header here because we've already written
+			w.Write([]byte("(after)"))
+		})
+	})
+	router.Get("/", handler("GET /"))
+	requestEqual(t, router, "GET /", `
+			HTTP/1.1 200 OK
+			Connection: close
+			Content-Type: text/plain; charset=utf-8
+			X-A: A
+
+			GET / (after)
+	`)
+}
+
+func TestMiddlewareWrapsNonMatches(t *testing.T) {
+	router := mux.New()
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-A", "A")
+			next.ServeHTTP(w, r)
+		})
+	})
+	router.Get("/", handler("GET /"))
+	requestEqual(t, router, "POST /", `
+			HTTP/1.1 404 Not Found
+			Connection: close
+			Content-Type: text/plain; charset=utf-8
+			X-A: A
+			X-Content-Type-Options: nosniff
+
+			404 page not found
+	`)
 }
 
 func TestPostBody(t *testing.T) {
