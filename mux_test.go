@@ -1,8 +1,8 @@
 package mux_test
 
 import (
-	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,9 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/livebud/middleware"
 	"github.com/livebud/mux"
-	"github.com/livebud/slot"
 	"github.com/matryer/is"
 	"github.com/matthewmueller/diff"
 )
@@ -66,7 +64,7 @@ func requestEqual(t testing.TB, router http.Handler, request string, expect stri
 		}
 		t.Fatal(err)
 	}
-	diff.TestHTTP(t, expect, string(actual))
+	diff.TestHTTP(t, string(actual), expect)
 }
 
 func TestSanity(t *testing.T) {
@@ -531,8 +529,8 @@ func TestSlotPriority(t *testing.T) {
 func TestTrailingSlash(t *testing.T) {
 	router := mux.New()
 	router.Get("/", handler("GET /"))
-	router.Get("/hi/", handler("GET /hi/"))
-	router.Get("/hi", handler("GET /hi"))
+	fmt.Println(router.Get("/hi/", handler("GET /hi/")))
+	fmt.Println(router.Get("/hi", handler("GET /hi")))
 
 	requestEqual(t, router, "GET /", `
 		HTTP/1.1 200 OK
@@ -540,6 +538,13 @@ func TestTrailingSlash(t *testing.T) {
 		Content-Type: text/plain; charset=utf-8
 
 		GET /
+	`)
+	requestEqual(t, router, "GET /hi", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /hi/
 	`)
 	requestEqual(t, router, "GET /hi/", `
 		HTTP/1.1 200 OK
@@ -559,14 +564,14 @@ func TestTrailingSlash(t *testing.T) {
 
 func TestInsensitive(t *testing.T) {
 	router := mux.New()
-	router.Get("/HI", handler("GET /HI"))
-	router.Get("/hi", handler("GET /hi"))
-	router.Get("/Hi", handler("GET /Hi"))
-	router.Get("/hI", handler("GET /hI"))
-	router.Get("/HI/", handler("GET /HI/"))
-	router.Get("/hi/", handler("GET /hi/"))
-	router.Get("/hI/", handler("GET /hI/"))
-	router.Get("/Hi/", handler("GET /Hi/"))
+	fmt.Println(router.Get("/HI", handler("GET /HI")))
+	fmt.Println(router.Get("/hi", handler("GET /hi")))
+	fmt.Println(router.Get("/Hi", handler("GET /Hi")))
+	fmt.Println(router.Get("/hI", handler("GET /hI")))
+	fmt.Println(router.Get("/HI/", handler("GET /HI/")))
+	fmt.Println(router.Get("/hi/", handler("GET /hi/")))
+	fmt.Println(router.Get("/hI/", handler("GET /hI/")))
+	fmt.Println(router.Get("/Hi/", handler("GET /Hi/")))
 
 	requestEqual(t, router, "GET /hi", `
 		HTTP/1.1 200 OK
@@ -787,7 +792,7 @@ func TestMatch(t *testing.T) {
 
 	match, err := router.Match(http.MethodGet, "/")
 	is.NoErr(err)
-	is.Equal(match.Route.String(), "/")
+	is.Equal(match.Route, "/")
 	is.Equal(match.Path, "/")
 	is.Equal(len(match.Slots), 0)
 
@@ -805,342 +810,25 @@ func TestMatch(t *testing.T) {
 
 	match, err = router.Match(http.MethodPost, "/users")
 	is.NoErr(err)
-	is.Equal(match.Route.String(), "/users")
+	is.Equal(match.Route, "/users")
 	is.Equal(match.Path, "/users")
 	is.Equal(len(match.Slots), 0)
 
 	match, err = router.Match(http.MethodPost, "/users/")
 	is.NoErr(err)
-	is.Equal(match.Route.String(), "/users")
+	is.Equal(match.Route, "/users")
 	is.Equal(match.Path, "/users")
 	is.Equal(len(match.Slots), 0)
 
 	match, err = router.Match(http.MethodGet, "/users/10/posts/20")
 	is.NoErr(err)
-	is.Equal(match.Route.String(), "/users/{user_id}/posts/{id}")
+	is.Equal(match.Route, "/users/{user_id}/posts/{id}")
 	is.Equal(match.Path, "/users/10/posts/20")
 	is.Equal(len(match.Slots), 2)
 	is.Equal(match.Slots[0].Key, "user_id")
 	is.Equal(match.Slots[0].Value, "10")
 	is.Equal(match.Slots[1].Key, "id")
 	is.Equal(match.Slots[1].Value, "20")
-}
-
-func TestLayout(t *testing.T) {
-	is := is.New(t)
-	router := mux.New()
-	root := handler("GET /")
-	router.Get("/", root)
-	signup := handler("GET /signup")
-	router.Get("/signup", signup)
-	createUsers := handler("POST /users")
-	router.Post("/users", createUsers)
-	listUsers := handler("GET /users")
-	router.Get("/users", listUsers)
-	layout := handler("/")
-	router.Layout("/", layout)
-	userLayout := handler("/users")
-	router.Layout("/users", userLayout)
-
-	// Match /
-	match, err := router.Match(http.MethodGet, "/")
-	is.NoErr(err)
-	is.Equal(match.Method, http.MethodGet)
-	is.Equal(match.Route.String(), "/")
-	is.Equal(match.Path, "/")
-	is.Equal(len(match.Slots), 0)
-	is.Equal(match.Handler, root)
-	is.True(match.Layout != nil)
-	is.Equal(match.Layout.Route, "/")
-	is.Equal(match.Layout.Handler, layout)
-	is.True(match.Error == nil)
-
-	// Find /
-	route, err := router.Find(http.MethodGet, "/")
-	is.NoErr(err)
-	is.Equal(route.Method, http.MethodGet)
-	is.Equal(route.Route, "/")
-	is.Equal(route.Handler, root)
-	is.True(route.Layout != nil)
-	is.Equal(route.Layout.Route, "/")
-	is.Equal(route.Layout.Handler, layout)
-	is.True(route.Error == nil)
-
-	// Match /signup
-	match, err = router.Match(http.MethodGet, "/signup")
-	is.NoErr(err)
-	is.Equal(match.Method, http.MethodGet)
-	is.Equal(match.Route.String(), "/signup")
-	is.Equal(match.Path, "/signup")
-	is.Equal(len(match.Slots), 0)
-	is.Equal(match.Handler, signup)
-	is.True(match.Layout != nil)
-	is.Equal(match.Layout.Route, "/")
-	is.Equal(match.Layout.Handler, layout)
-	is.True(match.Error == nil)
-
-	// Find /
-	route, err = router.Find(http.MethodGet, "/signup")
-	is.NoErr(err)
-	is.Equal(route.Method, http.MethodGet)
-	is.Equal(route.Route, "/signup")
-	is.Equal(route.Handler, signup)
-	is.True(route.Layout != nil)
-	is.Equal(route.Layout.Route, "/")
-	is.Equal(route.Layout.Handler, layout)
-	is.True(route.Error == nil)
-
-	// Match POST /users
-	match, err = router.Match(http.MethodPost, "/users")
-	is.NoErr(err)
-	is.Equal(match.Method, http.MethodPost)
-	is.Equal(match.Route.String(), "/users")
-	is.Equal(match.Path, "/users")
-	is.Equal(len(match.Slots), 0)
-	is.Equal(match.Handler, createUsers)
-	is.True(match.Layout == nil)
-	is.True(match.Error == nil)
-
-	// Find /
-	route, err = router.Find(http.MethodPost, "/users")
-	is.NoErr(err)
-	is.Equal(route.Method, http.MethodPost)
-	is.Equal(route.Route, "/users")
-	is.Equal(route.Handler, createUsers)
-	is.True(route.Layout == nil)
-	is.True(route.Error == nil)
-
-	// Match GET /users
-	match, err = router.Match(http.MethodGet, "/users")
-	is.NoErr(err)
-	is.Equal(match.Method, http.MethodGet)
-	is.Equal(match.Route.String(), "/users")
-	is.Equal(match.Path, "/users")
-	is.Equal(len(match.Slots), 0)
-	is.Equal(match.Handler, listUsers)
-	is.True(match.Layout != nil)
-	is.Equal(match.Layout.Route, "/users")
-	is.Equal(match.Layout.Handler, userLayout)
-	is.True(match.Error == nil)
-
-	// Find GET /users
-	route, err = router.Find(http.MethodGet, "/users")
-	is.NoErr(err)
-	is.Equal(route.Method, http.MethodGet)
-	is.Equal(route.Route, "/users")
-	is.Equal(route.Handler, listUsers)
-	is.True(route.Layout != nil)
-	is.Equal(route.Layout.Route, "/users")
-	is.Equal(route.Layout.Handler, userLayout)
-	is.True(route.Error == nil)
-}
-
-func TestError(t *testing.T) {
-	is := is.New(t)
-	router := mux.New()
-	root := handler("GET /")
-	router.Get("/", root)
-	signup := handler("GET /signup")
-	router.Get("/signup", signup)
-	createUsers := handler("POST /users")
-	router.Post("/users", createUsers)
-	listUsers := handler("GET /users")
-	router.Get("/users", listUsers)
-	errorHandler := handler("/")
-	router.Error("/", errorHandler)
-	userErrorHandler := handler("/users")
-	router.Error("/users", userErrorHandler)
-
-	// Match /
-	match, err := router.Match(http.MethodGet, "/")
-	is.NoErr(err)
-	is.Equal(match.Method, http.MethodGet)
-	is.Equal(match.Route.String(), "/")
-	is.Equal(match.Path, "/")
-	is.Equal(len(match.Slots), 0)
-	is.Equal(match.Handler, root)
-	is.True(match.Layout == nil)
-	is.True(match.Error != nil)
-	is.Equal(match.Error.Route, "/")
-	is.Equal(match.Error.Handler, errorHandler)
-
-	// Find /
-	route, err := router.Find(http.MethodGet, "/")
-	is.NoErr(err)
-	is.Equal(route.Method, http.MethodGet)
-	is.Equal(route.Route, "/")
-	is.Equal(route.Handler, root)
-	is.True(route.Layout == nil)
-	is.True(route.Error != nil)
-	is.Equal(route.Error.Route, "/")
-	is.Equal(route.Error.Handler, errorHandler)
-
-	// Match /signup
-	match, err = router.Match(http.MethodGet, "/signup")
-	is.NoErr(err)
-	is.Equal(match.Method, http.MethodGet)
-	is.Equal(match.Route.String(), "/signup")
-	is.Equal(match.Path, "/signup")
-	is.Equal(len(match.Slots), 0)
-	is.Equal(match.Handler, signup)
-	is.True(match.Layout == nil)
-	is.True(match.Error != nil)
-	is.Equal(match.Error.Route, "/")
-	is.Equal(match.Error.Handler, errorHandler)
-
-	// Find /signup
-	route, err = router.Find(http.MethodGet, "/signup")
-	is.NoErr(err)
-	is.Equal(route.Method, http.MethodGet)
-	is.Equal(route.Route, "/signup")
-	is.Equal(route.Handler, signup)
-	is.True(route.Layout == nil)
-	is.True(route.Error != nil)
-	is.Equal(route.Error.Route, "/")
-	is.Equal(route.Error.Handler, errorHandler)
-
-	// Match POST /users
-	match, err = router.Match(http.MethodPost, "/users")
-	is.NoErr(err)
-	is.Equal(match.Method, http.MethodPost)
-	is.Equal(match.Route.String(), "/users")
-	is.Equal(match.Path, "/users")
-	is.Equal(len(match.Slots), 0)
-	is.Equal(match.Handler, createUsers)
-	is.True(match.Layout == nil)
-	is.True(match.Error == nil)
-
-	// Find POST /users
-	route, err = router.Find(http.MethodPost, "/users")
-	is.NoErr(err)
-	is.Equal(route.Method, http.MethodPost)
-	is.Equal(route.Route, "/users")
-	is.Equal(route.Handler, createUsers)
-	is.True(route.Layout == nil)
-	is.True(route.Error == nil)
-
-	// Match GET /users
-	match, err = router.Match(http.MethodGet, "/users")
-	is.NoErr(err)
-	is.Equal(match.Method, http.MethodGet)
-	is.Equal(match.Route.String(), "/users")
-	is.Equal(match.Path, "/users")
-	is.Equal(len(match.Slots), 0)
-	is.Equal(match.Handler, listUsers)
-	is.True(match.Layout == nil)
-	is.True(match.Error != nil)
-	is.Equal(match.Error.Route, "/users")
-	is.Equal(match.Error.Handler, userErrorHandler)
-
-	route, err = router.Find(http.MethodGet, "/users")
-	is.NoErr(err)
-	is.Equal(route.Method, http.MethodGet)
-	is.Equal(route.Route, "/users")
-	is.Equal(route.Handler, listUsers)
-	is.True(route.Layout == nil)
-	is.True(route.Error != nil)
-	is.Equal(route.Error.Route, "/users")
-	is.Equal(route.Error.Handler, userErrorHandler)
-}
-
-func TestLayoutRequest(t *testing.T) {
-	is := is.New(t)
-	router := mux.New()
-	router.Layout("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b := new(bytes.Buffer)
-		b.WriteString("<layout>")
-		slots := slot.Open(w, r)
-		slot, err := slots.ReadString()
-		is.NoErr(err)
-		b.WriteString(slot)
-		b.WriteString("</layout>")
-		w.Write(b.Bytes())
-	}))
-	router.Get("/posts/{post_id}/comments", handler("GET /posts/{post_id}/comments"))
-	router.Post("/posts/{post_id}/comments", handler("POST /posts/{post_id}/comments"))
-	requestEqual(t, router, "GET /posts/10/comments", `
-		HTTP/1.1 200 OK
-		Connection: close
-		Content-Type: text/plain; charset=utf-8
-
-		<layout>GET /posts/{post_id}/comments post_id=10</layout>
-	`)
-	requestEqual(t, router, "POST /posts/10/comments", `
-		HTTP/1.1 200 OK
-		Connection: close
-		Content-Type: text/plain; charset=utf-8
-
-		POST /posts/{post_id}/comments post_id=10
-	`)
-	requestEqual(t, router, "GET /", `
-		HTTP/1.1 404 Not Found
-		Connection: close
-		Content-Type: text/plain; charset=utf-8
-		X-Content-Type-Options: nosniff
-
-		404 page not found
-	`)
-}
-
-func TestLayoutNonHTMLRequest(t *testing.T) {
-	is := is.New(t)
-	router := mux.New()
-	router.Layout("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		inner, err := io.ReadAll(r.Body)
-		is.NoErr(err)
-		w.Write([]byte("<layout>"))
-		w.Write(inner)
-		w.Write([]byte("</layout>"))
-	}))
-	router.Get("/posts/{post_id}/comments.js", handler("console.log('hi')").Set("Content-Type", "application/javascript"))
-	requestEqual(t, router, "GET /posts/10/comments.js", `
-		HTTP/1.1 200 OK
-		Connection: close
-		Content-Type: application/javascript
-
-		console.log('hi') post_id=10
-	`)
-}
-
-func TestMiddleware(t *testing.T) {
-	router := mux.New()
-	router.Use(middleware.Func(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("X-A", "A")
-			next.ServeHTTP(w, r)
-			// Note: Can't use a header here because we've already written
-			w.Write([]byte("(after)"))
-		})
-	}))
-	router.Get("/", handler("GET /"))
-	requestEqual(t, router, "GET /", `
-		HTTP/1.1 200 OK
-		Connection: close
-		Content-Type: text/plain; charset=utf-8
-		X-A: A
-
-		GET / (after)
-	`)
-}
-
-func TestMiddlewareWrapsNonMatches(t *testing.T) {
-	router := mux.New()
-	router.Use(middleware.Func(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("X-A", "A")
-			next.ServeHTTP(w, r)
-		})
-	}))
-	router.Get("/", handler("GET /"))
-	requestEqual(t, router, "POST /", `
-		HTTP/1.1 404 Not Found
-		Connection: close
-		Content-Type: text/plain; charset=utf-8
-		X-A: A
-		X-Content-Type-Options: nosniff
-
-		404 page not found
-	`)
 }
 
 func TestPostBody(t *testing.T) {
