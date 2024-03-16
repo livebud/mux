@@ -1,3 +1,9 @@
+# 0.1.0 / 2024-03-16
+
+- run go mod tidy and rename history to changelog
+- reduce scope of mux.Router
+- move the radix tree logic into enroute
+
 # 0.0.10 / 2024-01-24
 
 - don't apply slots when there are extensions
