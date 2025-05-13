@@ -1,3 +1,7 @@
+# 0.2.0 / 2025-05-12
+
+- bump enroute to improve matching
+
 # 0.1.1 / 2024-03-16
 
 - switch to using functions
