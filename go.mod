@@ -5,7 +5,7 @@ go 1.21.0
 require (
 	github.com/matryer/is v1.4.1
 	github.com/matthewmueller/diff v0.0.2
-	github.com/matthewmueller/enroute v0.0.9
+	github.com/matthewmueller/enroute v0.1.0
 )
 
 require (

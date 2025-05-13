@@ -31,7 +31,7 @@ func (t *tree) Find(method, route string) (*Route, error) {
 	}
 	return &Route{
 		Method:  method,
-		Route:   node.Route,
+		Route:   node.Label,
 		Handler: handler,
 	}, nil
 }
@@ -56,7 +56,7 @@ func (t *tree) Match(method, path string) (*Match, error) {
 
 func (t *tree) Routes(method string) (routes []*Route) {
 	t.Tree.Each(func(node *enroute.Node) bool {
-		if node.Route == "" {
+		if node.Label == "" {
 			return true
 		}
 		handler, ok := t.Handlers[node.Value]
@@ -65,7 +65,7 @@ func (t *tree) Routes(method string) (routes []*Route) {
 		}
 		routes = append(routes, &Route{
 			Method:  method,
-			Route:   node.Route,
+			Route:   node.Label,
 			Handler: handler,
 		})
 		return true

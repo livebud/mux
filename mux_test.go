@@ -716,29 +716,29 @@ func TestList(t *testing.T) {
 	is.Equal(len(routes), 25)
 	is.Equal(routes[0].String(), "GET /")
 	is.Equal(routes[1].String(), "GET /posts/{post_id}/comments")
-	is.Equal(routes[2].String(), "GET /posts/{post_id}/comments/{id}.")
-	is.Equal(routes[3].String(), "GET /posts/{post_id}/comments/{id}.{format}")
+	is.Equal(routes[2].String(), "GET /posts/{post_id}/comments/{id}.{format?}")
+	is.Equal(routes[3].String(), "GET /posts/{post_id}/comments/{id}.{format?}")
 	is.Equal(routes[4].String(), "GET /posts/{post_id}/comments/{id}/edit")
 	is.Equal(routes[5].String(), "GET /posts/{postid}/comments/new")
 	is.Equal(routes[6].String(), "GET /users")
 	is.Equal(routes[7].String(), "GET /users/new")
-	is.Equal(routes[8].String(), "GET /users/{id}.")
-	is.Equal(routes[9].String(), "GET /users/{id}.{format}")
+	is.Equal(routes[8].String(), "GET /users/{id}.{format?}")
+	is.Equal(routes[9].String(), "GET /users/{id}.{format?}")
 	is.Equal(routes[10].String(), "GET /users/{id}/edit")
 	is.Equal(routes[11].String(), "POST /posts/{post_id}/comments")
 	is.Equal(routes[12].String(), "POST /users")
-	is.Equal(routes[13].String(), "PUT /posts/{post_id}/comments/{id}.")
-	is.Equal(routes[14].String(), "PUT /posts/{post_id}/comments/{id}.{format}")
-	is.Equal(routes[15].String(), "PUT /users/{id}.")
-	is.Equal(routes[16].String(), "PUT /users/{id}.{format}")
-	is.Equal(routes[17].String(), "PATCH /posts/{post_id}/comments/{id}.")
-	is.Equal(routes[18].String(), "PATCH /posts/{post_id}/comments/{id}.{format}")
-	is.Equal(routes[19].String(), "PATCH /users/{id}.")
-	is.Equal(routes[20].String(), "PATCH /users/{id}.{format}")
-	is.Equal(routes[21].String(), "DELETE /posts/{post_id}/comments/{id}.")
-	is.Equal(routes[22].String(), "DELETE /posts/{post_id}/comments/{id}.{format}")
-	is.Equal(routes[23].String(), "DELETE /users/{id}.")
-	is.Equal(routes[24].String(), "DELETE /users/{id}.{format}")
+	is.Equal(routes[13].String(), "PUT /posts/{post_id}/comments/{id}.{format?}")
+	is.Equal(routes[14].String(), "PUT /posts/{post_id}/comments/{id}.{format?}")
+	is.Equal(routes[15].String(), "PUT /users/{id}.{format?}")
+	is.Equal(routes[16].String(), "PUT /users/{id}.{format?}")
+	is.Equal(routes[17].String(), "PATCH /posts/{post_id}/comments/{id}.{format?}")
+	is.Equal(routes[18].String(), "PATCH /posts/{post_id}/comments/{id}.{format?}")
+	is.Equal(routes[19].String(), "PATCH /users/{id}.{format?}")
+	is.Equal(routes[20].String(), "PATCH /users/{id}.{format?}")
+	is.Equal(routes[21].String(), "DELETE /posts/{post_id}/comments/{id}.{format?}")
+	is.Equal(routes[22].String(), "DELETE /posts/{post_id}/comments/{id}.{format?}")
+	is.Equal(routes[23].String(), "DELETE /users/{id}.{format?}")
+	is.Equal(routes[24].String(), "DELETE /users/{id}.{format?}")
 }
 
 func TestMissingRoot(t *testing.T) {
@@ -866,4 +866,32 @@ func TestPostBody(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	is.Equal(rec.Code, http.StatusOK)
 	is.Equal(rec.Body.String(), `{"name":"jon"}`)
+}
+
+func TestWildcardFallback(t *testing.T) {
+	router := mux.New()
+	router.Get("/", handler("GET /"))
+	router.Get("/{public?}", handler("GET /{public?}"))
+	router.Get("/{public*}", handler("GET /{public*}"))
+	requestEqual(t, router, "GET /", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /
+	`)
+	requestEqual(t, router, "GET /index.css", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /{public?} public=index.css
+	`)
+	requestEqual(t, router, "GET /assets/index.css", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /{public*} public=assets%2Findex.css
+	`)
 }
