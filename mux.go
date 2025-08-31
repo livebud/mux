@@ -20,11 +20,11 @@ type Middleware = func(next http.Handler) http.Handler
 
 type Interface interface {
 	Use(fn Middleware)
-	Get(route string, fn http.HandlerFunc) error
-	Post(route string, fn http.HandlerFunc) error
-	Put(route string, fn http.HandlerFunc) error
-	Patch(route string, fn http.HandlerFunc) error
-	Delete(route string, fn http.HandlerFunc) error
+	Get(route string, handler http.Handler) error
+	Post(route string, handler http.Handler) error
+	Put(route string, handler http.Handler) error
+	Patch(route string, handler http.Handler) error
+	Delete(route string, handler http.Handler) error
 	Set(method, route string, handler http.Handler) error
 }
 
@@ -57,27 +57,27 @@ func (rt *Router) Use(fn Middleware) {
 }
 
 // Get route
-func (rt *Router) Get(route string, handler http.HandlerFunc) error {
+func (rt *Router) Get(route string, handler http.Handler) error {
 	return rt.set(http.MethodGet, route, handler)
 }
 
 // Post route
-func (rt *Router) Post(route string, handler http.HandlerFunc) error {
+func (rt *Router) Post(route string, handler http.Handler) error {
 	return rt.set(http.MethodPost, route, handler)
 }
 
 // Put route
-func (rt *Router) Put(route string, handler http.HandlerFunc) error {
+func (rt *Router) Put(route string, handler http.Handler) error {
 	return rt.set(http.MethodPut, route, handler)
 }
 
 // Patch route
-func (rt *Router) Patch(route string, handler http.HandlerFunc) error {
+func (rt *Router) Patch(route string, handler http.Handler) error {
 	return rt.set(http.MethodPatch, route, handler)
 }
 
 // Delete route
-func (rt *Router) Delete(route string, handler http.HandlerFunc) error {
+func (rt *Router) Delete(route string, handler http.Handler) error {
 	return rt.set(http.MethodDelete, route, handler)
 }
 

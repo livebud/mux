@@ -18,9 +18,9 @@ import (
 
 // Handler returns the raw query
 func handler(route string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(route + " " + r.URL.RawQuery))
-	}
+	})
 }
 
 func requestEqual(t testing.TB, router http.Handler, request string, expect string) {
