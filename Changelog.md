@@ -1,3 +1,7 @@
+# 0.3.0 / 2025-08-31
+
+- **BREAKING:** switch back to using `http.Handler` instead of `http.HandlerFunc`. This just ends up being more flexible (e.g. allow for chaining) and it's easy enough to do `http.HandlerFunc(fn)`.
+
 # 0.2.0 / 2025-05-12
 
 - bump enroute to improve matching
