@@ -895,3 +895,24 @@ func TestWildcardFallback(t *testing.T) {
 		GET /{public*} public=assets%2Findex.css
 	`)
 }
+
+func TestWellKnown(t *testing.T) {
+	router := mux.New()
+	router.Get("/", handler("GET /"))
+	requestEqual(t, router, "GET /.well-known/appspecific/com.chrome.devtools.json", `
+		HTTP/1.1 404 Not Found
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+		X-Content-Type-Options: nosniff
+
+		404 page not found
+	`)
+	router.Get("/.well-known/{path*}", handler("GET /.well-known/{path*}"))
+	requestEqual(t, router, "GET /.well-known/openid-configuration", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /.well-known/{path*} path=openid-configuration
+	`)
+}
