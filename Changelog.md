@@ -1,3 +1,10 @@
+# 0.4.0 / 2026-01-25
+
+- **BREAKING** switch `Use(mw Middleware)` to accept a `Middleware` interface instead of a function
+- Add `mux.Use(fn)` and `mux.Compose(...mw)`.
+- Add tests for `subrouter := router.Group(path)`
+- sanity check for /.well-known
+
 # 0.3.0 / 2025-08-31
 
 - **BREAKING:** switch back to using `http.Handler` instead of `http.HandlerFunc`. This just ends up being more flexible (e.g. allow for chaining) and it's easy enough to do `http.HandlerFunc(fn)`.
