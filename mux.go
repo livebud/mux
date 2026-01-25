@@ -16,10 +16,19 @@ var (
 	ErrNoMatch   = enroute.ErrNoMatch
 )
 
-type Middleware = func(next http.Handler) http.Handler
+type Middleware interface {
+	Middleware(next http.Handler) http.Handler
+}
+
+// Use adapts middleware functions into Middleware
+type Use func(next http.Handler) http.Handler
+
+func (fn Use) Middleware(next http.Handler) http.Handler {
+	return fn(next)
+}
 
 type Interface interface {
-	Use(fn Middleware)
+	Use(mw Middleware)
 	Get(route string, handler http.Handler) error
 	Post(route string, handler http.Handler) error
 	Put(route string, handler http.Handler) error
@@ -112,8 +121,8 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Middleware turns the router into middleware where if there are no matches
 // it will call the next middleware in the stack
 func (rt *Router) Middleware(next http.Handler) http.Handler {
-	middleware := compose(rt.stack)
-	return middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	stack := Compose(rt.stack...)
+	return stack.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Match the path
 		match, err := rt.Match(r.Method, r.URL.Path)
 		if err != nil {
@@ -210,15 +219,15 @@ func isMethod(method string) bool {
 	}
 }
 
-// Compose a stack of middleware
-func compose(stack []Middleware) Middleware {
-	return func(next http.Handler) http.Handler {
+// Compose a stack of middleware into one middleware
+func Compose(stack ...Middleware) Middleware {
+	return Use(func(next http.Handler) http.Handler {
 		if len(stack) == 0 {
 			return next
 		}
 		for i := len(stack) - 1; i >= 0; i-- {
-			next = stack[i](next)
+			next = stack[i].Middleware(next)
 		}
 		return next
-	}
+	})
 }

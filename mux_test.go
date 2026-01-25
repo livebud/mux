@@ -813,14 +813,61 @@ func TestMatch(t *testing.T) {
 
 func TestMiddleware(t *testing.T) {
 	router := mux.New()
-	router.Use(func(next http.Handler) http.Handler {
+	router.Use(mux.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-A", "A")
 			next.ServeHTTP(w, r)
 			// Note: Can't use a header here because we've already written
-			w.Write([]byte("(after)"))
+			w.Write([]byte(" (a)"))
 		})
-	})
+	}))
+	router.Use(mux.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-B", "B")
+			next.ServeHTTP(w, r)
+			// Note: Can't use a header here because we've already written
+			w.Write([]byte("(b)"))
+		})
+	}))
+	router.Get("/", handler("GET /"))
+	requestEqual(t, router, "GET /", `
+			HTTP/1.1 200 OK
+			Connection: close
+			Content-Type: text/plain; charset=utf-8
+			X-A: A
+			X-B: B
+
+			GET / (b) (a)
+	`)
+}
+
+func TestComposeNone(t *testing.T) {
+	router := mux.New()
+	mw := mux.Compose()
+	router.Use(mw)
+	router.Get("/", handler("GET /"))
+	requestEqual(t, router, "GET /", `
+			HTTP/1.1 200 OK
+			Connection: close
+			Content-Type: text/plain; charset=utf-8
+
+			GET /
+	`)
+}
+
+func TestComposeOne(t *testing.T) {
+	router := mux.New()
+	mw := mux.Compose(
+		mux.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-A", "A")
+				next.ServeHTTP(w, r)
+				// Note: Can't use a header here because we've already written
+				w.Write([]byte("(a)"))
+			})
+		}),
+	)
+	router.Use(mw)
 	router.Get("/", handler("GET /"))
 	requestEqual(t, router, "GET /", `
 			HTTP/1.1 200 OK
@@ -828,18 +875,50 @@ func TestMiddleware(t *testing.T) {
 			Content-Type: text/plain; charset=utf-8
 			X-A: A
 
-			GET / (after)
+			GET / (a)
+	`)
+}
+func TestComposeMany(t *testing.T) {
+	router := mux.New()
+	mw := mux.Compose(
+		mux.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-A", "A")
+				next.ServeHTTP(w, r)
+				// Note: Can't use a header here because we've already written
+				w.Write([]byte(" (a)"))
+			})
+		}),
+		mux.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-B", "B")
+				next.ServeHTTP(w, r)
+				// Note: Can't use a header here because we've already written
+				w.Write([]byte("(b)"))
+			})
+		}),
+	)
+	router.Use(mw)
+	router.Get("/", handler("GET /"))
+	requestEqual(t, router, "GET /", `
+			HTTP/1.1 200 OK
+			Connection: close
+			Content-Type: text/plain; charset=utf-8
+			X-A: A
+			X-B: B
+
+			GET / (b) (a)
 	`)
 }
 
 func TestMiddlewareWrapsNonMatches(t *testing.T) {
 	router := mux.New()
-	router.Use(func(next http.Handler) http.Handler {
+	router.Use(mux.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-A", "A")
 			next.ServeHTTP(w, r)
 		})
-	})
+	}))
 	router.Get("/", handler("GET /"))
 	requestEqual(t, router, "POST /", `
 			HTTP/1.1 404 Not Found
@@ -914,5 +993,61 @@ func TestWellKnown(t *testing.T) {
 		Content-Type: text/plain; charset=utf-8
 
 		GET /.well-known/{path*} path=openid-configuration
+	`)
+}
+
+func TestGroup(t *testing.T) {
+	router := mux.New()
+	auth := router.Group("/auth")
+	auth.Get("/login", handler("GET /auth/login"))
+	auth.Post("/login", handler("POST /auth/login"))
+	auth.Get("/logout", handler("GET /auth/logout"))
+
+	v1 := router.Group("/api/{version}")
+	v1.Get("/users", handler("GET /api/{version}/users"))
+	v1.Post("/users", handler("POST /api/{version}/users"))
+	v1.Get("/users/{id}", handler("GET /api/{version}/users/{id}"))
+
+	requestEqual(t, router, "GET /auth/login", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /auth/login
+	`)
+	requestEqual(t, router, "POST /auth/login", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		POST /auth/login
+	`)
+	requestEqual(t, router, "GET /auth/logout", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /auth/logout
+	`)
+	requestEqual(t, router, "GET /api/v1/users", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /api/{version}/users version=v1
+	`)
+	requestEqual(t, router, "POST /api/v1/users", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		POST /api/{version}/users version=v1
+	`)
+	requestEqual(t, router, "GET /api/v1/users/10", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /api/{version}/users/{id} id=10&version=v1
 	`)
 }
