@@ -1,3 +1,8 @@
+# 0.5.0 / 2026-02-01
+
+- **BREAKING** rename `mux.Interface` to `mux.Routes`
+- add support for mux.Mount(m mux.Mountable)
+
 # 0.4.0 / 2026-01-25
 
 - **BREAKING** switch `Use(mw Middleware)` to accept a `Middleware` interface instead of a function
