@@ -1051,3 +1051,58 @@ func TestGroup(t *testing.T) {
 		GET /api/{version}/users/{id} id=10&version=v1
 	`)
 }
+
+type slackHandler struct {
+}
+
+var _ mux.Mountable = (*slackHandler)(nil)
+
+func (s *slackHandler) Mount(routes mux.Routes) {
+	routes.Post("/events", handler("POST /slack/events"))
+	routes.Get("/commands", handler("GET /slack/commands"))
+}
+
+type telegramHandler struct {
+}
+
+var _ mux.Mountable = (*telegramHandler)(nil)
+
+func (s *telegramHandler) Mount(routes mux.Routes) {
+	routes.Post("/events", handler("POST /telegram/events"))
+	routes.Get("/commands", handler("GET /telegram/commands"))
+}
+
+func TestMount(t *testing.T) {
+	router := mux.New()
+	router.Group("/slack").Mount(&slackHandler{})
+	router.Group("/telegram").Mount(&telegramHandler{})
+
+	requestEqual(t, router, "POST /slack/events", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		POST /slack/events
+	`)
+	requestEqual(t, router, "GET /slack/commands", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /slack/commands
+	`)
+	requestEqual(t, router, "POST /telegram/events", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		POST /telegram/events
+	`)
+	requestEqual(t, router, "GET /telegram/commands", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /telegram/commands
+	`)
+}

@@ -27,7 +27,8 @@ func (fn Use) Middleware(next http.Handler) http.Handler {
 	return fn(next)
 }
 
-type Interface interface {
+// Routes interface for defining routes
+type Routes interface {
 	Use(mw Middleware)
 	Get(route string, handler http.Handler) error
 	Post(route string, handler http.Handler) error
@@ -35,6 +36,11 @@ type Interface interface {
 	Patch(route string, handler http.Handler) error
 	Delete(route string, handler http.Handler) error
 	Set(method, route string, handler http.Handler) error
+}
+
+// Mountable interface for mounting routes
+type Mountable interface {
+	Mount(routes Routes)
 }
 
 type Match struct {
@@ -59,10 +65,16 @@ type Router struct {
 }
 
 var _ http.Handler = (*Router)(nil)
-var _ Interface = (*Router)(nil)
+var _ Routes = (*Router)(nil)
 
+// Use middleware
 func (rt *Router) Use(fn Middleware) {
 	rt.stack = append(rt.stack, fn)
+}
+
+// Mount routes
+func (rt *Router) Mount(m Mountable) {
+	m.Mount(rt)
 }
 
 // Get route
