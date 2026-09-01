@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -27,20 +28,9 @@ func (fn Use) Middleware(next http.Handler) http.Handler {
 	return fn(next)
 }
 
-// Routes interface for defining routes
-type Routes interface {
-	Use(mw Middleware)
-	Get(route string, handler http.Handler) error
-	Post(route string, handler http.Handler) error
-	Put(route string, handler http.Handler) error
-	Patch(route string, handler http.Handler) error
-	Delete(route string, handler http.Handler) error
-	Set(method, route string, handler http.Handler) error
-}
-
 // Mountable interface for mounting routes
 type Mountable interface {
-	Mount(routes Routes)
+	Mount(router *Router)
 }
 
 type Match struct {
@@ -65,16 +55,29 @@ type Router struct {
 }
 
 var _ http.Handler = (*Router)(nil)
-var _ Routes = (*Router)(nil)
 
 // Use middleware
-func (rt *Router) Use(fn Middleware) {
-	rt.stack = append(rt.stack, fn)
+func (rt *Router) Use(mws ...Middleware) *Router {
+	return &Router{
+		base:    rt.base,
+		stack:   slices.Concat(rt.stack, mws),
+		methods: rt.methods,
+	}
+}
+
+// Group routes within a route
+func (rt *Router) Group(route string) *Router {
+	return &Router{
+		base:    strings.TrimSuffix(path.Join(rt.base, route), "/"),
+		stack:   rt.stack,
+		methods: rt.methods,
+	}
 }
 
 // Mount routes
-func (rt *Router) Mount(m Mountable) {
-	m.Mount(rt)
+func (rt *Router) Mount(mnt Mountable) *Router {
+	mnt.Mount(rt)
+	return rt
 }
 
 // Get route
@@ -112,16 +115,8 @@ func (rt *Router) Set(method string, route string, handler http.Handler) error {
 
 // Set the route
 func (rt *Router) set(method, route string, handler http.Handler) error {
+	handler = Compose(rt.stack...).Middleware(handler)
 	return rt.insert(method, path.Join(rt.base, route), handler)
-}
-
-// Group routes within a route
-func (rt *Router) Group(route string) *Router {
-	return &Router{
-		base:    strings.TrimSuffix(path.Join(rt.base, route), "/"),
-		stack:   rt.stack,
-		methods: rt.methods,
-	}
 }
 
 // ServeHTTP implements http.Handler
@@ -134,15 +129,16 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // it will call the next middleware in the stack
 func (rt *Router) Middleware(next http.Handler) http.Handler {
 	stack := Compose(rt.stack...)
-	return stack.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Match the path
 		match, err := rt.Match(r.Method, r.URL.Path)
 		if err != nil {
 			if errors.Is(err, enroute.ErrNoMatch) {
-				next.ServeHTTP(w, r)
+				stack.Middleware(next).ServeHTTP(w, r)
 				return
 			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			// Generally shouldn't reach this point, but if we do, return a 500
+			stack.Middleware(internalServerError(err)).ServeHTTP(w, r)
 			return
 		}
 		// Add the slots as query params
@@ -154,7 +150,13 @@ func (rt *Router) Middleware(next http.Handler) http.Handler {
 			r.URL.RawQuery = query.Encode()
 		}
 		match.Handler.ServeHTTP(w, r)
-	}))
+	})
+}
+
+func internalServerError(err error) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	})
 }
 
 type Route struct {
@@ -237,8 +239,8 @@ func Compose(stack ...Middleware) Middleware {
 		if len(stack) == 0 {
 			return next
 		}
-		for i := len(stack) - 1; i >= 0; i-- {
-			next = stack[i].Middleware(next)
+		for _, s := range slices.Backward(stack) {
+			next = s.Middleware(next)
 		}
 		return next
 	})

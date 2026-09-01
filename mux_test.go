@@ -813,22 +813,23 @@ func TestMatch(t *testing.T) {
 
 func TestMiddleware(t *testing.T) {
 	router := mux.New()
-	router.Use(mux.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("X-A", "A")
-			next.ServeHTTP(w, r)
-			// Note: Can't use a header here because we've already written
-			w.Write([]byte(" (a)"))
-		})
-	}))
-	router.Use(mux.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("X-B", "B")
-			next.ServeHTTP(w, r)
-			// Note: Can't use a header here because we've already written
-			w.Write([]byte("(b)"))
-		})
-	}))
+	router = router.Use(
+		mux.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-A", "A")
+				next.ServeHTTP(w, r)
+				// Note: Can't use a header here because we've already written
+				w.Write([]byte(" (a)"))
+			})
+		}),
+		mux.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-B", "B")
+				next.ServeHTTP(w, r)
+				// Note: Can't use a header here because we've already written
+				w.Write([]byte("(b)"))
+			})
+		}))
 	router.Get("/", handler("GET /"))
 	requestEqual(t, router, "GET /", `
 			HTTP/1.1 200 OK
@@ -841,10 +842,42 @@ func TestMiddleware(t *testing.T) {
 	`)
 }
 
+func TestRouteSpecificMiddleware(t *testing.T) {
+	middleware := func(name string) mux.Middleware {
+		return mux.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("(" + name + ") "))
+				next.ServeHTTP(w, r)
+				w.Write([]byte("(" + name + ") "))
+			})
+		})
+	}
+
+	router := mux.New()
+	router = router.Use(middleware("a"), middleware("b"))
+	router.Use(middleware("c")).Get("/", handler("GET /"))
+	router.Post("/", handler("POST /"))
+
+	requestEqual(t, router, "GET /", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		(a) (b) (c) GET / (c) (b) (a)
+	`)
+	requestEqual(t, router, "POST /", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		(a) (b) POST / (b) (a)
+	`)
+}
+
 func TestComposeNone(t *testing.T) {
 	router := mux.New()
 	mw := mux.Compose()
-	router.Use(mw)
+	router = router.Use(mw)
 	router.Get("/", handler("GET /"))
 	requestEqual(t, router, "GET /", `
 			HTTP/1.1 200 OK
@@ -867,7 +900,7 @@ func TestComposeOne(t *testing.T) {
 			})
 		}),
 	)
-	router.Use(mw)
+	router = router.Use(mw)
 	router.Get("/", handler("GET /"))
 	requestEqual(t, router, "GET /", `
 			HTTP/1.1 200 OK
@@ -898,7 +931,7 @@ func TestComposeMany(t *testing.T) {
 			})
 		}),
 	)
-	router.Use(mw)
+	router = router.Use(mw)
 	router.Get("/", handler("GET /"))
 	requestEqual(t, router, "GET /", `
 			HTTP/1.1 200 OK
@@ -913,7 +946,7 @@ func TestComposeMany(t *testing.T) {
 
 func TestMiddlewareWrapsNonMatches(t *testing.T) {
 	router := mux.New()
-	router.Use(mux.Use(func(next http.Handler) http.Handler {
+	router = router.Use(mux.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-A", "A")
 			next.ServeHTTP(w, r)
@@ -1057,9 +1090,9 @@ type slackHandler struct {
 
 var _ mux.Mountable = (*slackHandler)(nil)
 
-func (s *slackHandler) Mount(routes mux.Routes) {
-	routes.Post("/events", handler("POST /slack/events"))
-	routes.Get("/commands", handler("GET /slack/commands"))
+func (s *slackHandler) Mount(router *mux.Router) {
+	router.Post("/events", handler("POST /slack/events"))
+	router.Get("/commands", handler("GET /slack/commands"))
 }
 
 type telegramHandler struct {
@@ -1067,12 +1100,32 @@ type telegramHandler struct {
 
 var _ mux.Mountable = (*telegramHandler)(nil)
 
-func (s *telegramHandler) Mount(routes mux.Routes) {
-	routes.Post("/events", handler("POST /telegram/events"))
-	routes.Get("/commands", handler("GET /telegram/commands"))
+func (s *telegramHandler) Mount(router *mux.Router) {
+	router.Post("/events", handler("POST /telegram/events"))
+	router.Get("/commands", handler("GET /telegram/commands"))
 }
 
 func TestMount(t *testing.T) {
+	router := mux.New()
+	router.Mount(&slackHandler{})
+
+	requestEqual(t, router, "POST /events", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		POST /slack/events
+	`)
+	requestEqual(t, router, "GET /commands", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /slack/commands
+	`)
+}
+
+func TestGroupMount(t *testing.T) {
 	router := mux.New()
 	router.Group("/slack").Mount(&slackHandler{})
 	router.Group("/telegram").Mount(&telegramHandler{})
