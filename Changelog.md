@@ -1,3 +1,12 @@
+# 0.6.0 / 2026-08-31
+
+- **BREAKING**: you must now do `r = r.Use(mw)`, as returns a new router instance
+- **BREAKING**: remove `mux.Routes`
+- **BREAKING**: `Mountable` now returns a `*Router`
+- add support route-specific middleware
+- add support for passing in multiple middleware into `r.Use(mw...)`
+- `r.Mount(mnt)` now returns a `*Router`
+
 # 0.5.0 / 2026-02-01
 
 - **BREAKING** rename `mux.Interface` to `mux.Routes`
