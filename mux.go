@@ -15,6 +15,7 @@ import (
 var (
 	ErrDuplicate = enroute.ErrDuplicate
 	ErrNoMatch   = enroute.ErrNoMatch
+	ErrInvalid   = enroute.ErrInvalid
 )
 
 type Middleware interface {
@@ -80,37 +81,51 @@ func (rt *Router) Mount(mnt Mountable) *Router {
 	return rt
 }
 
-// Get route
-func (rt *Router) Get(route string, handler http.Handler) error {
-	return rt.set(http.MethodGet, route, handler)
+// Get route. Panics if the route is invalid or conflicts with an existing
+// route. Use Set to get an error instead.
+func (rt *Router) Get(route string, handler http.Handler) {
+	rt.mustSet(http.MethodGet, route, handler)
 }
 
-// Post route
-func (rt *Router) Post(route string, handler http.Handler) error {
-	return rt.set(http.MethodPost, route, handler)
+// Post route. Panics if the route is invalid or conflicts with an existing
+// route. Use Set to get an error instead.
+func (rt *Router) Post(route string, handler http.Handler) {
+	rt.mustSet(http.MethodPost, route, handler)
 }
 
-// Put route
-func (rt *Router) Put(route string, handler http.Handler) error {
-	return rt.set(http.MethodPut, route, handler)
+// Put route. Panics if the route is invalid or conflicts with an existing
+// route. Use Set to get an error instead.
+func (rt *Router) Put(route string, handler http.Handler) {
+	rt.mustSet(http.MethodPut, route, handler)
 }
 
-// Patch route
-func (rt *Router) Patch(route string, handler http.Handler) error {
-	return rt.set(http.MethodPatch, route, handler)
+// Patch route. Panics if the route is invalid or conflicts with an existing
+// route. Use Set to get an error instead.
+func (rt *Router) Patch(route string, handler http.Handler) {
+	rt.mustSet(http.MethodPatch, route, handler)
 }
 
-// Delete route
-func (rt *Router) Delete(route string, handler http.Handler) error {
-	return rt.set(http.MethodDelete, route, handler)
+// Delete route. Panics if the route is invalid or conflicts with an existing
+// route. Use Set to get an error instead.
+func (rt *Router) Delete(route string, handler http.Handler) {
+	rt.mustSet(http.MethodDelete, route, handler)
 }
 
-// Set a handler manually
+// Set a handler for any HTTP method. Unlike Get, Post, etc., Set returns an
+// error instead of panicking.
 func (rt *Router) Set(method string, route string, handler http.Handler) error {
 	if !isMethod(method) {
 		return fmt.Errorf("router: %q is not a valid HTTP method", method)
 	}
 	return rt.set(method, route, handler)
+}
+
+// mustSet panics because a bad route is a programmer error, not a runtime
+// condition. It panics with the error so callers can recover and errors.Is it.
+func (rt *Router) mustSet(method, route string, handler http.Handler) {
+	if err := rt.set(method, route, handler); err != nil {
+		panic(err)
+	}
 }
 
 // Set the route

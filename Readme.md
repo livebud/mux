@@ -44,6 +44,8 @@ func main() {
 }
 ```
 
+Registering an invalid or duplicate route panics. Use `router.Set(method, route, handler)` to get an error instead.
+
 ## Contributors
 
 - Matt Mueller ([@mattmueller](https://twitter.com/mattmueller))

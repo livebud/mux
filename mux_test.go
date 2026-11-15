@@ -2,7 +2,6 @@ package mux_test
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -507,10 +506,12 @@ func TestSlotPriority(t *testing.T) {
 }
 
 func TestTrailingSlash(t *testing.T) {
+	is := is.New(t)
 	router := mux.New()
 	router.Get("/", handler("GET /"))
-	fmt.Println(router.Get("/hi/", handler("GET /hi/")))
-	fmt.Println(router.Get("/hi", handler("GET /hi")))
+	router.Get("/hi/", handler("GET /hi/"))
+	err := router.Set("GET", "/hi", handler("GET /hi"))
+	is.True(errors.Is(err, mux.ErrDuplicate))
 
 	requestEqual(t, router, "GET /", `
 		HTTP/1.1 200 OK
@@ -543,15 +544,17 @@ func TestTrailingSlash(t *testing.T) {
 }
 
 func TestInsensitive(t *testing.T) {
+	is := is.New(t)
 	router := mux.New()
-	fmt.Println(router.Get("/HI", handler("GET /HI")))
-	fmt.Println(router.Get("/hi", handler("GET /hi")))
-	fmt.Println(router.Get("/Hi", handler("GET /Hi")))
-	fmt.Println(router.Get("/hI", handler("GET /hI")))
-	fmt.Println(router.Get("/HI/", handler("GET /HI/")))
-	fmt.Println(router.Get("/hi/", handler("GET /hi/")))
-	fmt.Println(router.Get("/hI/", handler("GET /hI/")))
-	fmt.Println(router.Get("/Hi/", handler("GET /Hi/")))
+	router.Get("/hi", handler("GET /hi"))
+	// Routes must be lowercase; requests match case-insensitively
+	is.True(errors.Is(router.Set("GET", "/HI", handler("GET /HI")), mux.ErrInvalid))
+	is.True(errors.Is(router.Set("GET", "/Hi", handler("GET /Hi")), mux.ErrInvalid))
+	is.True(errors.Is(router.Set("GET", "/hI", handler("GET /hI")), mux.ErrInvalid))
+	is.True(errors.Is(router.Set("GET", "/HI/", handler("GET /HI/")), mux.ErrInvalid))
+	is.True(errors.Is(router.Set("GET", "/hI/", handler("GET /hI/")), mux.ErrInvalid))
+	is.True(errors.Is(router.Set("GET", "/Hi/", handler("GET /Hi/")), mux.ErrInvalid))
+	is.True(errors.Is(router.Set("GET", "/hi/", handler("GET /hi/")), mux.ErrDuplicate))
 
 	requestEqual(t, router, "GET /hi", `
 		HTTP/1.1 200 OK
@@ -671,8 +674,7 @@ func TestFind(t *testing.T) {
 	is := is.New(t)
 	router := mux.New()
 	h := handler("GET /{id}")
-	err := router.Get("/{id}", h)
-	is.NoErr(err)
+	router.Get("/{id}", h)
 	route, err := router.Find("GET", "/{id}")
 	is.NoErr(err)
 	is.Equal(route.Method, "GET")
@@ -686,32 +688,44 @@ func TestFind(t *testing.T) {
 func TestDuplicateError(t *testing.T) {
 	is := is.New(t)
 	router := mux.New()
-	err := router.Get("/", handler("GET /"))
+	err := router.Set("GET", "/", handler("GET /"))
 	is.NoErr(err)
-	err = router.Get("/", handler("GET /"))
+	err = router.Set("GET", "/", handler("GET /"))
 	is.True(errors.Is(err, mux.ErrDuplicate))
+}
+
+func TestDuplicatePanic(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	router.Get("/", handler("GET /"))
+	defer func() {
+		err, ok := recover().(error)
+		is.True(ok)
+		is.True(errors.Is(err, mux.ErrDuplicate))
+	}()
+	router.Get("/", handler("GET /"))
 }
 
 func TestList(t *testing.T) {
 	is := is.New(t)
 	router := mux.New()
-	is.NoErr(router.Get("/", handler("GET /")))
-	is.NoErr(router.Get("/users", handler("GET /users")))
-	is.NoErr(router.Get("/users/new", handler("GET /users/new")))
-	is.NoErr(router.Post("/users", handler("POST /users")))
-	is.NoErr(router.Get("/users/{id}.{format?}", handler("GET /users/{id}.{format?}")))
-	is.NoErr(router.Get("/users/{id}/edit", handler("GET /users/{id}/edit")))
-	is.NoErr(router.Patch("/users/{id}.{format?}", handler("PATCH /users/{id}.{format?}")))
-	is.NoErr(router.Put("/users/{id}.{format?}", handler("PUT /users/{id}.{format?}")))
-	is.NoErr(router.Delete("/users/{id}.{format?}", handler("DELETE /users/{id}.{format?}")))
-	is.NoErr(router.Get("/posts/{post_id}/comments", handler("GET /posts/{post_id}/comments")))
-	is.NoErr(router.Get("/posts/{postid}/comments/new", handler("GET /posts/{postid}/comments/new")))
-	is.NoErr(router.Post("/posts/{post_id}/comments", handler("POST /posts/{post_id}/comments")))
-	is.NoErr(router.Get("/posts/{post_id}/comments/{id}.{format?}", handler("GET /posts/{post_id}/comments/{id}.{format?}")))
-	is.NoErr(router.Get("/posts/{post_id}/comments/{id}/edit", handler("GET /posts/{post_id}/comments/{id}/edit")))
-	is.NoErr(router.Patch("/posts/{post_id}/comments/{id}.{format?}", handler("PATCH /posts/{post_id}/comments/{id}.{format?}")))
-	is.NoErr(router.Put("/posts/{post_id}/comments/{id}.{format?}", handler("PUT /posts/{post_id}/comments/{id}.{format?}")))
-	is.NoErr(router.Delete("/posts/{post_id}/comments/{id}.{format?}", handler("DELETE /posts/{post_id}/comments/{id}.{format?}")))
+	router.Get("/", handler("GET /"))
+	router.Get("/users", handler("GET /users"))
+	router.Get("/users/new", handler("GET /users/new"))
+	router.Post("/users", handler("POST /users"))
+	router.Get("/users/{id}.{format?}", handler("GET /users/{id}.{format?}"))
+	router.Get("/users/{id}/edit", handler("GET /users/{id}/edit"))
+	router.Patch("/users/{id}.{format?}", handler("PATCH /users/{id}.{format?}"))
+	router.Put("/users/{id}.{format?}", handler("PUT /users/{id}.{format?}"))
+	router.Delete("/users/{id}.{format?}", handler("DELETE /users/{id}.{format?}"))
+	router.Get("/posts/{post_id}/comments", handler("GET /posts/{post_id}/comments"))
+	router.Get("/posts/{postid}/comments/new", handler("GET /posts/{postid}/comments/new"))
+	router.Post("/posts/{post_id}/comments", handler("POST /posts/{post_id}/comments"))
+	router.Get("/posts/{post_id}/comments/{id}.{format?}", handler("GET /posts/{post_id}/comments/{id}.{format?}"))
+	router.Get("/posts/{post_id}/comments/{id}/edit", handler("GET /posts/{post_id}/comments/{id}/edit"))
+	router.Patch("/posts/{post_id}/comments/{id}.{format?}", handler("PATCH /posts/{post_id}/comments/{id}.{format?}"))
+	router.Put("/posts/{post_id}/comments/{id}.{format?}", handler("PUT /posts/{post_id}/comments/{id}.{format?}"))
+	router.Delete("/posts/{post_id}/comments/{id}.{format?}", handler("DELETE /posts/{post_id}/comments/{id}.{format?}"))
 	routes := router.Routes()
 	is.Equal(len(routes), 25)
 	is.Equal(routes[0].String(), "GET /")
