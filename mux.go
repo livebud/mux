@@ -1,12 +1,11 @@
 package mux
 
 import (
-	"errors"
+	"cmp"
 	"fmt"
 	"net/http"
 	"path"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/matthewmueller/enroute"
@@ -44,15 +43,14 @@ type Match struct {
 
 func New() *Router {
 	return &Router{
-		base:    "",
-		methods: map[string]*tree{},
+		methods: map[string]*enroute.Tree[http.Handler]{},
 	}
 }
 
 type Router struct {
 	base    string
 	stack   []Middleware
-	methods map[string]*tree
+	methods map[string]*enroute.Tree[http.Handler]
 }
 
 var _ http.Handler = (*Router)(nil)
@@ -128,16 +126,18 @@ func (rt *Router) mustSet(method, route string, handler http.Handler) {
 	}
 }
 
-// Set the route
 func (rt *Router) set(method, route string, handler http.Handler) error {
-	handler = Compose(rt.stack...).Middleware(handler)
-	return rt.insert(method, path.Join(rt.base, route), handler)
+	tr := rt.methods[method]
+	if tr == nil {
+		tr = enroute.New[http.Handler]()
+		rt.methods[method] = tr
+	}
+	return tr.Insert(path.Join(rt.base, route), Compose(rt.stack...).Middleware(handler))
 }
 
 // ServeHTTP implements http.Handler
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	handler := rt.Middleware(http.NotFoundHandler())
-	handler.ServeHTTP(w, r)
+	rt.Middleware(http.NotFoundHandler()).ServeHTTP(w, r)
 }
 
 // Middleware turns the router into middleware where if there are no matches
@@ -145,15 +145,10 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (rt *Router) Middleware(next http.Handler) http.Handler {
 	stack := Compose(rt.stack...)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Match the path
+		// Match only fails with ErrNoMatch, so fall through to next
 		match, err := rt.Match(r.Method, r.URL.Path)
 		if err != nil {
-			if errors.Is(err, enroute.ErrNoMatch) {
-				stack.Middleware(next).ServeHTTP(w, r)
-				return
-			}
-			// Generally shouldn't reach this point, but if we do, return a 500
-			stack.Middleware(internalServerError(err)).ServeHTTP(w, r)
+			stack.Middleware(next).ServeHTTP(w, r)
 			return
 		}
 		// Add the slots as query params
@@ -165,12 +160,6 @@ func (rt *Router) Middleware(next http.Handler) http.Handler {
 			r.URL.RawQuery = query.Encode()
 		}
 		match.Handler.ServeHTTP(w, r)
-	})
-}
-
-func internalServerError(err error) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 	})
 }
 
@@ -189,7 +178,11 @@ func (rt *Router) Find(method, route string) (*Route, error) {
 	if !ok {
 		return nil, fmt.Errorf("router: %w found for %s %s", ErrNoMatch, method, route)
 	}
-	return tree.Find(method, route)
+	node, err := tree.Find(path.Join(rt.base, route))
+	if err != nil {
+		return nil, err
+	}
+	return &Route{Method: method, Route: node.Label, Handler: node.Value}, nil
 }
 
 var methodSort = map[string]int{
@@ -203,13 +196,17 @@ var methodSort = map[string]int{
 // Routes lists all the routes
 func (rt *Router) Routes() (routes []*Route) {
 	for method, tree := range rt.methods {
-		routes = append(routes, tree.Routes(method)...)
-	}
-	sort.Slice(routes, func(i, j int) bool {
-		if routes[i].Method != routes[j].Method {
-			return methodSort[routes[i].Method] < methodSort[routes[j].Method]
+		for _, r := range tree.Routes() {
+			routes = append(routes, &Route{Method: method, Route: r.Route, Handler: r.Value})
 		}
-		return routes[i].Route < routes[j].Route
+	}
+	slices.SortFunc(routes, func(a, b *Route) int {
+		return cmp.Or(
+			cmp.Compare(methodSort[a.Method], methodSort[b.Method]),
+			strings.Compare(a.Route, b.Route),
+			// Methods missing from methodSort tie with GET, so break the tie
+			strings.Compare(a.Method, b.Method),
+		)
 	})
 	return routes
 }
@@ -220,20 +217,11 @@ func (rt *Router) Match(method, path string) (*Match, error) {
 	if !ok {
 		return nil, fmt.Errorf("router: %w found for %s %s", ErrNoMatch, method, path)
 	}
-	return tree.Match(method, path)
-}
-
-// Insert the route into the method's radix tree
-func (rt *Router) insert(method, route string, handler http.Handler) error {
-	tr := rt.methods[method]
-	if tr == nil {
-		tr = &tree{
-			Tree:     enroute.New(),
-			Handlers: map[string]http.Handler{},
-		}
-		rt.methods[method] = tr
+	m, err := tree.Match(path)
+	if err != nil {
+		return nil, err
 	}
-	return tr.Insert(route, handler)
+	return &Match{Method: method, Route: m.Route, Path: m.Path, Slots: m.Slots, Handler: m.Value}, nil
 }
 
 // isMethod returns true if method is a valid HTTP method
@@ -251,9 +239,6 @@ func isMethod(method string) bool {
 // Compose a stack of middleware into one middleware
 func Compose(stack ...Middleware) Middleware {
 	return Use(func(next http.Handler) http.Handler {
-		if len(stack) == 0 {
-			return next
-		}
 		for _, s := range slices.Backward(stack) {
 			next = s.Middleware(next)
 		}

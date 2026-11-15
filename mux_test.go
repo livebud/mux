@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -28,12 +27,7 @@ func requestEqual(t testing.TB, router http.Handler, request string, expect stri
 	if len(parts) != 2 {
 		t.Fatalf("invalid request: %s", request)
 	}
-	u, err := url.Parse(parts[1])
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := httptest.NewRequest(parts[0], u.Path, nil)
-	req.URL.RawQuery = u.RawQuery
+	req := httptest.NewRequest(parts[0], parts[1], nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	actual, err := httputil.DumpResponse(rec.Result(), true)
@@ -683,6 +677,12 @@ func TestFind(t *testing.T) {
 	route, err = router.Find("POST", "/{id}")
 	is.True(errors.Is(err, mux.ErrNoMatch))
 	is.Equal(route, nil)
+	// Find resolves routes relative to the group, like Get does
+	api := router.Group("/api")
+	api.Get("/x", h)
+	route, err = api.Find("GET", "/x")
+	is.NoErr(err)
+	is.Equal(route.Route, "/api/x")
 }
 
 func TestDuplicateError(t *testing.T) {
@@ -727,32 +727,40 @@ func TestList(t *testing.T) {
 	router.Put("/posts/{post_id}/comments/{id}.{format?}", handler("PUT /posts/{post_id}/comments/{id}.{format?}"))
 	router.Delete("/posts/{post_id}/comments/{id}.{format?}", handler("DELETE /posts/{post_id}/comments/{id}.{format?}"))
 	routes := router.Routes()
-	is.Equal(len(routes), 25)
+	is.Equal(len(routes), 17)
 	is.Equal(routes[0].String(), "GET /")
 	is.Equal(routes[1].String(), "GET /posts/{post_id}/comments")
 	is.Equal(routes[2].String(), "GET /posts/{post_id}/comments/{id}.{format?}")
-	is.Equal(routes[3].String(), "GET /posts/{post_id}/comments/{id}.{format?}")
-	is.Equal(routes[4].String(), "GET /posts/{post_id}/comments/{id}/edit")
-	is.Equal(routes[5].String(), "GET /posts/{postid}/comments/new")
-	is.Equal(routes[6].String(), "GET /users")
-	is.Equal(routes[7].String(), "GET /users/new")
-	is.Equal(routes[8].String(), "GET /users/{id}.{format?}")
-	is.Equal(routes[9].String(), "GET /users/{id}.{format?}")
-	is.Equal(routes[10].String(), "GET /users/{id}/edit")
-	is.Equal(routes[11].String(), "POST /posts/{post_id}/comments")
-	is.Equal(routes[12].String(), "POST /users")
-	is.Equal(routes[13].String(), "PUT /posts/{post_id}/comments/{id}.{format?}")
-	is.Equal(routes[14].String(), "PUT /posts/{post_id}/comments/{id}.{format?}")
-	is.Equal(routes[15].String(), "PUT /users/{id}.{format?}")
-	is.Equal(routes[16].String(), "PUT /users/{id}.{format?}")
-	is.Equal(routes[17].String(), "PATCH /posts/{post_id}/comments/{id}.{format?}")
-	is.Equal(routes[18].String(), "PATCH /posts/{post_id}/comments/{id}.{format?}")
-	is.Equal(routes[19].String(), "PATCH /users/{id}.{format?}")
-	is.Equal(routes[20].String(), "PATCH /users/{id}.{format?}")
-	is.Equal(routes[21].String(), "DELETE /posts/{post_id}/comments/{id}.{format?}")
-	is.Equal(routes[22].String(), "DELETE /posts/{post_id}/comments/{id}.{format?}")
-	is.Equal(routes[23].String(), "DELETE /users/{id}.{format?}")
-	is.Equal(routes[24].String(), "DELETE /users/{id}.{format?}")
+	is.Equal(routes[3].String(), "GET /posts/{post_id}/comments/{id}/edit")
+	is.Equal(routes[4].String(), "GET /posts/{postid}/comments/new")
+	is.Equal(routes[5].String(), "GET /users")
+	is.Equal(routes[6].String(), "GET /users/new")
+	is.Equal(routes[7].String(), "GET /users/{id}.{format?}")
+	is.Equal(routes[8].String(), "GET /users/{id}/edit")
+	is.Equal(routes[9].String(), "POST /posts/{post_id}/comments")
+	is.Equal(routes[10].String(), "POST /users")
+	is.Equal(routes[11].String(), "PUT /posts/{post_id}/comments/{id}.{format?}")
+	is.Equal(routes[12].String(), "PUT /users/{id}.{format?}")
+	is.Equal(routes[13].String(), "PATCH /posts/{post_id}/comments/{id}.{format?}")
+	is.Equal(routes[14].String(), "PATCH /users/{id}.{format?}")
+	is.Equal(routes[15].String(), "DELETE /posts/{post_id}/comments/{id}.{format?}")
+	is.Equal(routes[16].String(), "DELETE /users/{id}.{format?}")
+}
+
+func TestListUnranked(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	is.NoErr(router.Set(http.MethodOptions, "/p", handler("OPTIONS /p")))
+	is.NoErr(router.Set(http.MethodHead, "/p", handler("HEAD /p")))
+	router.Get("/p", handler("GET /p"))
+	// Map iteration is random, so repeat to catch an unstable order
+	for range 20 {
+		routes := router.Routes()
+		is.Equal(len(routes), 3)
+		is.Equal(routes[0].String(), "GET /p")
+		is.Equal(routes[1].String(), "HEAD /p")
+		is.Equal(routes[2].String(), "OPTIONS /p")
+	}
 }
 
 func TestMissingRoot(t *testing.T) {
