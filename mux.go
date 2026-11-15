@@ -137,7 +137,8 @@ func (rt *Router) set(method, route string, handler http.Handler) error {
 
 // ServeHTTP implements http.Handler. Requests with no matching route get a
 // 405 with an Allow header if the path matches under another method,
-// otherwise a 404.
+// otherwise a 404. OPTIONS requests for a known path get a 204 with an Allow
+// header, unless an OPTIONS route handles them.
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rt.Middleware(http.HandlerFunc(rt.notFound)).ServeHTTP(w, r)
 }
@@ -157,8 +158,13 @@ func (rt *Router) notFound(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	allow = append(allow, http.MethodOptions)
 	slices.Sort(allow)
 	w.Header().Set("Allow", strings.Join(slices.Compact(allow), ", "))
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 }
 

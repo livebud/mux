@@ -614,7 +614,7 @@ func TestSet(t *testing.T) {
 	requestEqual(t, router, "GET /10", `
 		HTTP/1.1 405 Method Not Allowed
 		Connection: close
-		Allow: HEAD
+		Allow: HEAD, OPTIONS
 		Content-Type: text/plain; charset=utf-8
 		X-Content-Type-Options: nosniff
 
@@ -988,7 +988,7 @@ func TestMiddlewareWrapsNonMatches(t *testing.T) {
 	requestEqual(t, router, "POST /", `
 			HTTP/1.1 405 Method Not Allowed
 			Connection: close
-			Allow: GET, HEAD
+			Allow: GET, HEAD, OPTIONS
 			Content-Type: text/plain; charset=utf-8
 			X-A: A
 			X-Content-Type-Options: nosniff
@@ -1030,11 +1030,40 @@ func TestMethodNotAllowed(t *testing.T) {
 	requestEqual(t, router, "PUT /users/10", `
 		HTTP/1.1 405 Method Not Allowed
 		Connection: close
-		Allow: DELETE, GET, HEAD
+		Allow: DELETE, GET, HEAD, OPTIONS
 		Content-Type: text/plain; charset=utf-8
 		X-Content-Type-Options: nosniff
 
 		Method Not Allowed
+	`)
+}
+
+func TestOptions(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	router.Get("/users/{id}", handler("GET /users/{id}"))
+	router.Delete("/users/{id}", handler("DELETE /users/{id}"))
+	requestEqual(t, router, "OPTIONS /users/10", `
+		HTTP/1.1 204 No Content
+		Connection: close
+		Allow: DELETE, GET, HEAD, OPTIONS
+	`)
+	requestEqual(t, router, "OPTIONS /missing", `
+		HTTP/1.1 404 Not Found
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+		X-Content-Type-Options: nosniff
+
+		404 page not found
+	`)
+	// An explicit OPTIONS route wins over the automatic response
+	is.NoErr(router.Set(http.MethodOptions, "/users/{id}", handler("OPTIONS /users/{id}")))
+	requestEqual(t, router, "OPTIONS /users/10", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		OPTIONS /users/{id} id=10
 	`)
 }
 
