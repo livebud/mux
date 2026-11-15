@@ -135,13 +135,37 @@ func (rt *Router) set(method, route string, handler http.Handler) error {
 	return tr.Insert(path.Join(rt.base, route), Compose(rt.stack...).Middleware(handler))
 }
 
-// ServeHTTP implements http.Handler
+// ServeHTTP implements http.Handler. Requests with no matching route get a
+// 405 with an Allow header if the path matches under another method,
+// otherwise a 404.
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	rt.Middleware(http.NotFoundHandler()).ServeHTTP(w, r)
+	rt.Middleware(http.HandlerFunc(rt.notFound)).ServeHTTP(w, r)
+}
+
+func (rt *Router) notFound(w http.ResponseWriter, r *http.Request) {
+	var allow []string
+	for method, tree := range rt.methods {
+		if _, err := tree.Match(r.URL.Path); err != nil {
+			continue
+		}
+		allow = append(allow, method)
+		if method == http.MethodGet {
+			allow = append(allow, http.MethodHead)
+		}
+	}
+	if len(allow) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	slices.Sort(allow)
+	w.Header().Set("Allow", strings.Join(slices.Compact(allow), ", "))
+	http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 }
 
 // Middleware turns the router into middleware where if there are no matches
-// it will call the next middleware in the stack
+// it will call the next middleware in the stack. Unlike ServeHTTP, a path that
+// matches under another method also calls next, since a later handler may
+// serve that method.
 func (rt *Router) Middleware(next http.Handler) http.Handler {
 	stack := Compose(rt.stack...)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -211,8 +235,17 @@ func (rt *Router) Routes() (routes []*Route) {
 	return routes
 }
 
-// Match a route from a method and path
+// Match a route from a method and path. HEAD requests fall back to GET routes
+// when there's no HEAD route.
 func (rt *Router) Match(method, path string) (*Match, error) {
+	match, err := rt.match(method, path)
+	if err != nil && method == http.MethodHead {
+		return rt.match(http.MethodGet, path)
+	}
+	return match, err
+}
+
+func (rt *Router) match(method, path string) (*Match, error) {
 	tree, ok := rt.methods[method]
 	if !ok {
 		return nil, fmt.Errorf("router: %w found for %s %s", ErrNoMatch, method, path)

@@ -612,12 +612,13 @@ func TestSet(t *testing.T) {
 	router := mux.New()
 	router.Set(http.MethodHead, "/{id}", handler("HEAD /{id}"))
 	requestEqual(t, router, "GET /10", `
-		HTTP/1.1 404 Not Found
+		HTTP/1.1 405 Method Not Allowed
 		Connection: close
+		Allow: HEAD
 		Content-Type: text/plain; charset=utf-8
 		X-Content-Type-Options: nosniff
 
-		404 page not found
+		Method Not Allowed
 	`)
 	requestEqual(t, router, "HEAD /10", `
 		HTTP/1.1 200 OK
@@ -975,7 +976,7 @@ func TestMiddlewareWrapsNonMatches(t *testing.T) {
 		})
 	}))
 	router.Get("/", handler("GET /"))
-	requestEqual(t, router, "POST /", `
+	requestEqual(t, router, "GET /missing", `
 			HTTP/1.1 404 Not Found
 			Connection: close
 			Content-Type: text/plain; charset=utf-8
@@ -983,6 +984,70 @@ func TestMiddlewareWrapsNonMatches(t *testing.T) {
 			X-Content-Type-Options: nosniff
 
 			404 page not found
+	`)
+	requestEqual(t, router, "POST /", `
+			HTTP/1.1 405 Method Not Allowed
+			Connection: close
+			Allow: GET, HEAD
+			Content-Type: text/plain; charset=utf-8
+			X-A: A
+			X-Content-Type-Options: nosniff
+
+			Method Not Allowed
+	`)
+}
+
+func TestHeadFallsBackToGet(t *testing.T) {
+	is := is.New(t)
+	router := mux.New()
+	router.Get("/users/{id}", handler("GET /users/{id}"))
+	requestEqual(t, router, "HEAD /users/10", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		GET /users/{id} id=10
+	`)
+	match, err := router.Match(http.MethodHead, "/users/10")
+	is.NoErr(err)
+	is.Equal(match.Method, http.MethodGet)
+	// An explicit HEAD route wins over the GET fallback
+	is.NoErr(router.Set(http.MethodHead, "/users/{id}", handler("HEAD /users/{id}")))
+	requestEqual(t, router, "HEAD /users/10", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		HEAD /users/{id} id=10
+	`)
+}
+
+func TestMethodNotAllowed(t *testing.T) {
+	router := mux.New()
+	router.Get("/users/{id}", handler("GET /users/{id}"))
+	router.Delete("/users/{id}", handler("DELETE /users/{id}"))
+	router.Post("/users", handler("POST /users"))
+	requestEqual(t, router, "PUT /users/10", `
+		HTTP/1.1 405 Method Not Allowed
+		Connection: close
+		Allow: DELETE, GET, HEAD
+		Content-Type: text/plain; charset=utf-8
+		X-Content-Type-Options: nosniff
+
+		Method Not Allowed
+	`)
+}
+
+func TestMiddlewareWrongMethodCallsNext(t *testing.T) {
+	router := mux.New()
+	router.Get("/", handler("GET /"))
+	next := router.Middleware(handler("next"))
+	requestEqual(t, next, "POST /", `
+		HTTP/1.1 200 OK
+		Connection: close
+		Content-Type: text/plain; charset=utf-8
+
+		next 
 	`)
 }
 
