@@ -1,3 +1,9 @@
+# 0.7.0 / 2026-11-15
+
+- **BREAKING** panic instead of returning an error. This has been confusing
+  agents and it's typically a developer error anyway. If you need to return an
+  error use `r.Set(http.MethodGet, ...)`
+
 # 0.6.0 / 2026-08-31
 
 - **BREAKING**: you must now do `r = r.Use(mw)`, as returns a new router instance
