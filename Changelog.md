@@ -1,3 +1,15 @@
+# 0.8.0 / 2026-11-15
+
+- **BREAKING** `ServeHTTP` returns 405 with an `Allow` header instead of 404 when the path matches under another method. `r.Middleware(next)` still calls `next`.
+- **BREAKING** overlapping routes no longer depend on registration order; the more specific route wins (required > optional > wildcard). For example, `/users/1` used to match `/users/{path*}` if it was registered before `/users/{id}`.
+- **BREAKING** `Find` on a `Group` router resolves the route relative to the group, like `Get` (`api.Find("GET", "/x")`, not `"/api/x"`)
+- HEAD requests are served by GET routes when there's no HEAD route
+- OPTIONS requests get a 204 with an `Allow` header unless an OPTIONS route handles them. Add CORS middleware to the router you serve (`r.Use(cors)`), not to a group.
+- `Routes()` lists optional and wildcard routes once, in a stable order
+- `Find` works with trailing slashes
+- a route that fails to register no longer leaves part of itself behind
+- bump enroute to v0.3.0
+
 # 0.7.0 / 2026-11-15
 
 - **BREAKING** panic instead of returning an error. This has been confusing
